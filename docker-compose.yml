@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: kpfc-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "./docker/localstack:/etc/localstack/init/ready.d"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  api:
+    build: .
+    container_name: kpfc-api
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENV=development
+      - JWT_SECRET=dev-secret-change-in-production
+      - JWT_EXPIRATION=24h
+      - AWS_REGION=us-east-1
+      - AWS_ENDPOINT=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - DYNAMO_TABLE_USERS=kpfc_users
+      - DYNAMO_TABLE_DECKS=kpfc_decks
+      - DYNAMO_TABLE_CARDS=kpfc_cards
+      - S3_BUCKET_AVATARS=kpfc-avatars
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+    depends_on:
+      - localstack
