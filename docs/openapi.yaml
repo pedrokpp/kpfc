@@ -1,0 +1,299 @@
+openapi: 3.0.3
+info:
+  title: KPFC - Flashcards API
+  description: REST API for flashcards with spaced repetition (SM-2 algorithm)
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@kpfc.dev
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Development server
+
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Users
+    description: User management
+  - name: Decks
+    description: Deck operations
+  - name: Cards
+    description: Card operations and spaced repetition
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        picture:
+          type: string
+        provider:
+          type: string
+          enum: [local, google, github]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Deck:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        is_public:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Card:
+      type: object
+      properties:
+        id:
+          type: string
+        deck_id:
+          type: string
+        front:
+          type: string
+        back:
+          type: string
+        interval:
+          type: integer
+        ease_factor:
+          type: number
+          format: float
+        due_date:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                name:
+                  type: string
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /decks:
+    get:
+      tags: [Decks]
+      summary: Get user's decks
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of decks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deck'
+
+    post:
+      tags: [Decks]
+      summary: Create a new deck
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                is_public:
+                  type: boolean
+      responses:
+        '201':
+          description: Deck created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+
+  /decks/{deckId}/cards:
+    post:
+      tags: [Cards]
+      summary: Create a new card
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: deckId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [front, back]
+              properties:
+                front:
+                  type: string
+                back:
+                  type: string
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+
+  /decks/{deckId}/cards/{cardId}/review:
+    post:
+      tags: [Cards]
+      summary: Review a card (SM-2 algorithm)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: deckId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quality]
+              properties:
+                quality:
+                  type: integer
+                  description: 0=Again, 1=Hard, 2=Good, 3=Easy
+                  minimum: 0
+                  maximum: 3
+      responses:
+        '200':
+          description: Card reviewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
