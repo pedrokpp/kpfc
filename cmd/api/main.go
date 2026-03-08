@@ -24,13 +24,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"kpp.dev/kpfc/internal/config"
 	"kpp.dev/kpfc/internal/handler"
 	"kpp.dev/kpfc/internal/middleware"
 	"kpp.dev/kpfc/internal/repository/dynamo"
 	"kpp.dev/kpfc/internal/repository/s3"
+	"kpp.dev/kpfc/internal/router"
 	cardUseCase "kpp.dev/kpfc/internal/usecase/card"
 	deckUseCase "kpp.dev/kpfc/internal/usecase/deck"
 	userUseCase "kpp.dev/kpfc/internal/usecase/user"
@@ -93,40 +92,14 @@ func main() {
 	deckHandler := handler.NewDeckHandler(deckUC)
 	cardHandler := handler.NewCardHandler(cardUC)
 
-	r := chi.NewRouter()
-
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recovery)
-	r.Use(corsMid.Handler)
-	r.Use(middleware.AGPLSourceCode("https://github.com/pedrokpp/kpfc"))
-
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/auth/register", authHandler.Register)
-		r.Post("/auth/login", authHandler.Login)
-
-		r.Group(func(r chi.Router) {
-			r.Use(jwtMid.Authenticate)
-
-			r.Get("/users/me", userHandler.GetMe)
-			r.Put("/users/me", userHandler.UpdateMe)
-			r.Delete("/users/me", userHandler.DeleteMe)
-
-			r.Get("/decks", deckHandler.GetMyDecks)
-			r.Post("/decks", deckHandler.CreateDeck)
-			r.Get("/decks/public", deckHandler.GetPublicDecks)
-			r.Get("/decks/{deckId}", deckHandler.GetDeck)
-			r.Put("/decks/{deckId}", deckHandler.UpdateDeck)
-			r.Delete("/decks/{deckId}", deckHandler.DeleteDeck)
-			r.Post("/decks/{deckId}/clone", deckHandler.CloneDeck)
-
-			r.Get("/decks/{deckId}/cards", cardHandler.GetCards)
-			r.Post("/decks/{deckId}/cards", cardHandler.CreateCard)
-			r.Get("/decks/{deckId}/cards/due", cardHandler.GetDueCards)
-			r.Get("/decks/{deckId}/cards/{cardId}", cardHandler.GetCard)
-			r.Put("/decks/{deckId}/cards/{cardId}", cardHandler.UpdateCard)
-			r.Delete("/decks/{deckId}/cards/{cardId}", cardHandler.DeleteCard)
-			r.Post("/decks/{deckId}/cards/{cardId}/review", cardHandler.ReviewCard)
-		})
+	r := router.New(router.Config{
+		AuthHandler:    authHandler,
+		UserHandler:    userHandler,
+		DeckHandler:    deckHandler,
+		CardHandler:    cardHandler,
+		JWTMiddleware:  jwtMid,
+		CORSMiddleware: corsMid,
+		AGPLSourceURL:  "https://github.com/pedrokpp/kpfc",
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)
