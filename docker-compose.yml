@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   localstack:
     image: localstack/localstack:latest
@@ -16,7 +14,7 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
 
   api:
-    build: .
+    image: kpfc:latest
     container_name: kpfc-api
     ports:
       - "8080:8080"
