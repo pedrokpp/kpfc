@@ -19,17 +19,84 @@ Este documento fornece diretrizes para agentes de IA (como Claude, Cursor, Copil
 
 ## Comandos de Build/Lint/Test
 
-### Build
+> **Este projeto usa [Just](https://github.com/casey/just) como task runner.**  
+> Execute `just` para ver todos os comandos disponíveis.
+
+### Referência Rápida
+
+#### Desenvolvimento
+```bash
+just run                    # Executar API local (requer .env)
+just build                  # Compilar binário para produção
+just clean                  # Limpar binários e artefatos
+just setup                  # Setup inicial do projeto (primeira vez)
+```
+
+#### Testes
+```bash
+just test                   # Executar todos os testes
+just test-race              # Testes com race detector
+just test-coverage          # Testes com relatório de cobertura (HTML)
+just test-package <pkg>     # Testar pacote específico (ex: just test-package user)
+just test-watch             # Modo watch (requer gow)
+```
+
+#### Quality Assurance
+```bash
+just lint                   # Executar golangci-lint
+just lint-fix               # Lint com auto-fix
+just fmt                    # Formatar código (goimports + gofmt)
+just fmt-check              # Verificar formatação sem modificar
+just check                  # Pipeline completo: fmt + lint + test
+just ci                     # Alias para check (simula CI)
+```
+
+#### Docker
+```bash
+just docker                 # Subir containers em background (padrão)
+just docker-build           # Build da imagem Docker
+just docker-up              # Subir containers em foreground
+just docker-down            # Parar e remover containers
+just docker-restart         # Reiniciar containers
+just docker-logs [service]  # Ver logs (ex: just docker-logs api)
+just localstack             # Apenas LocalStack standalone
+```
+
+#### Utilitários
+```bash
+just install-tools          # Instalar ferramentas de dev (golangci-lint, goimports, gow)
+```
+
+### Pre-commit Hook
+
+O comando `just setup` instala automaticamente um **pre-commit hook** que executa `just check` antes de cada commit.
+
+**Comportamento:**
+- ✅ Formata código automaticamente
+- ✅ Executa lint
+- ✅ Roda todos os testes
+- ❌ **Bloqueia o commit se alguma verificação falhar**
+
+**Para pular o hook (use com cuidado):**
+```bash
+git commit --no-verify -m "WIP: work in progress"
+```
+
+### Comandos Go Nativos (Referência)
+
+Os comandos abaixo são equivalentes diretos, úteis caso você não tenha o Just instalado:
+
+#### Build
 ```bash
 go build -o bin/api cmd/api/main.go
 ```
 
-### Run (development)
+#### Run (development)
 ```bash
 go run cmd/api/main.go
 ```
 
-### Lint
+#### Lint
 ```bash
 # Instalar golangci-lint se necessário
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -38,50 +105,50 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 golangci-lint run
 ```
 
-### Tests
+#### Tests
 
-#### Run all tests
+##### Run all tests
 ```bash
 go test ./...
 ```
 
-#### Run tests with coverage
+##### Run tests with coverage
 ```bash
 go test -cover ./...
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
-#### Run tests in a specific package
+##### Run tests in a specific package
 ```bash
 go test ./internal/usecase/user
 go test ./internal/handler
 ```
 
-#### Run a single test
+##### Run a single test
 ```bash
 go test -run TestCreateUser ./internal/usecase/user
 go test -v -run TestUserHandler_Register ./internal/handler
 ```
 
-#### Run tests with race detector
+##### Run tests with race detector
 ```bash
 go test -race ./...
 ```
 
-### Docker
+#### Docker
 
-#### Build image
+##### Build image
 ```bash
 docker build -t kpfc:latest .
 ```
 
-#### Run with LocalStack
+##### Run with LocalStack
 ```bash
 docker-compose up
 ```
 
-#### Run LocalStack standalone
+##### Run LocalStack standalone
 ```bash
 docker-compose up localstack
 ```
