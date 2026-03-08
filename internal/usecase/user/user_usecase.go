@@ -19,6 +19,8 @@ package user
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +42,18 @@ func NewUseCase(userRepo domain.UserRepository, storageRepo domain.StorageReposi
 }
 
 func (uc *UseCase) Register(email, password, name string) (*domain.User, error) {
+	if err := validateEmail(email); err != nil {
+		return nil, err
+	}
+
+	if err := validatePassword(password); err != nil {
+		return nil, err
+	}
+
+	if err := validateName(name); err != nil {
+		return nil, err
+	}
+
 	existing, err := uc.userRepo.GetByEmail(email)
 	if err == nil && existing != nil {
 		return nil, domain.ErrAlreadyExists
@@ -124,4 +138,42 @@ func (uc *UseCase) CreateOrGetOAuthUser(email, name, provider string) (*domain.U
 	}
 
 	return user, nil
+}
+
+var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+
+func validateEmail(email string) error {
+	email = strings.TrimSpace(email)
+
+	if email == "" {
+		return fmt.Errorf("email cannot be empty: %w", domain.ErrInvalidInput)
+	}
+
+	if !emailRegex.MatchString(email) {
+		return fmt.Errorf("invalid email format: %w", domain.ErrInvalidInput)
+	}
+
+	return nil
+}
+
+func validatePassword(password string) error {
+	if password == "" {
+		return fmt.Errorf("password cannot be empty: %w", domain.ErrInvalidInput)
+	}
+
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters: %w", domain.ErrInvalidInput)
+	}
+
+	return nil
+}
+
+func validateName(name string) error {
+	name = strings.TrimSpace(name)
+
+	if name == "" {
+		return fmt.Errorf("name cannot be empty: %w", domain.ErrInvalidInput)
+	}
+
+	return nil
 }

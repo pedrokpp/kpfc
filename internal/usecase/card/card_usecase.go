@@ -19,6 +19,7 @@ package card
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +40,10 @@ func NewUseCase(cardRepo domain.CardRepository, deckRepo domain.DeckRepository) 
 }
 
 func (uc *UseCase) CreateCard(userID, deckID, front, back string) (*domain.Card, error) {
+	if err := validateCardContent(front, back); err != nil {
+		return nil, err
+	}
+
 	deck, err := uc.deckRepo.GetByID(deckID)
 	if err != nil {
 		return nil, err
@@ -112,6 +117,10 @@ func (uc *UseCase) GetDueCards(userID, deckID string) ([]*domain.Card, error) {
 }
 
 func (uc *UseCase) UpdateCard(userID, cardID, front, back string) (*domain.Card, error) {
+	if err := validateCardContent(front, back); err != nil {
+		return nil, err
+	}
+
 	card, err := uc.cardRepo.GetByID(cardID)
 	if err != nil {
 		return nil, err
@@ -177,4 +186,27 @@ func (uc *UseCase) ReviewCard(userID, cardID string, quality domain.ReviewQualit
 	}
 
 	return card, nil
+}
+
+func validateCardContent(front, back string) error {
+	front = strings.TrimSpace(front)
+	back = strings.TrimSpace(back)
+
+	if front == "" {
+		return fmt.Errorf("front cannot be empty: %w", domain.ErrInvalidInput)
+	}
+
+	if back == "" {
+		return fmt.Errorf("back cannot be empty: %w", domain.ErrInvalidInput)
+	}
+
+	if len(front) > 1000 {
+		return fmt.Errorf("front exceeds 1000 characters: %w", domain.ErrInvalidInput)
+	}
+
+	if len(back) > 1000 {
+		return fmt.Errorf("back exceeds 1000 characters: %w", domain.ErrInvalidInput)
+	}
+
+	return nil
 }

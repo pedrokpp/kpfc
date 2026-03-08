@@ -19,6 +19,7 @@ package deck
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,6 +38,10 @@ func NewUseCase(deckRepo domain.DeckRepository) *UseCase {
 }
 
 func (uc *UseCase) CreateDeck(userID, title, description string, isPublic bool) (*domain.Deck, error) {
+	if err := validateDeckTitle(title); err != nil {
+		return nil, err
+	}
+
 	deck := &domain.Deck{
 		ID:          uuid.New().String(),
 		UserID:      userID,
@@ -76,6 +81,10 @@ func (uc *UseCase) GetPublicDecks() ([]*domain.Deck, error) {
 }
 
 func (uc *UseCase) UpdateDeck(userID, deckID, title, description string, isPublic bool) (*domain.Deck, error) {
+	if err := validateDeckTitle(title); err != nil {
+		return nil, err
+	}
+
 	deck, err := uc.deckRepo.GetByID(deckID)
 	if err != nil {
 		return nil, err
@@ -111,5 +120,28 @@ func (uc *UseCase) DeleteDeck(userID, deckID string) error {
 }
 
 func (uc *UseCase) CloneDeck(userID, deckID string) (*domain.Deck, error) {
+	deck, err := uc.deckRepo.GetByID(deckID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !deck.IsPublic {
+		return nil, fmt.Errorf("cannot clone private deck: %w", domain.ErrForbidden)
+	}
+
 	return uc.deckRepo.Clone(deckID, userID)
+}
+
+func validateDeckTitle(title string) error {
+	title = strings.TrimSpace(title)
+
+	if title == "" {
+		return fmt.Errorf("title cannot be empty: %w", domain.ErrInvalidInput)
+	}
+
+	if len(title) > 1000 {
+		return fmt.Errorf("title exceeds 1000 characters: %w", domain.ErrInvalidInput)
+	}
+
+	return nil
 }
