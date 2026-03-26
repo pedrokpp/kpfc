@@ -202,7 +202,7 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Implement the SM-2 spaced repetition algorithm and both study modes.
 
-- [ ] Create `pkg/sm2/sm2.go` — pure SM-2 function with no external dependencies:
+- [x] Create `pkg/sm2/sm2.go` — pure SM-2 function with no external dependencies:
   ```go
   type Result struct {
     Repetitions  int
@@ -217,17 +217,17 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
   - If `quality >= 3`: `repetitions += 1`; interval: rep 1 → 1, rep 2 → 6, rep > 2 → `round(interval × EF)`
   - `EF = max(EF + (0.1 - (5-q)×(0.08 + (5-q)×0.02)), 1.3)`
   - `NextReviewAt = now + interval days` (truncated to day boundary)
-- [ ] Write thorough unit tests for `pkg/sm2/sm2.go`: test all quality grades (0–5), minimum EF clamping (1.3), reset behavior on grade < 3, interval progression
-- [ ] Create `internal/service/study.go` — `StudyService`:
+- [x] Write thorough unit tests for `pkg/sm2/sm2.go`: test all quality grades (0–5), minimum EF clamping (1.3), reset behavior on grade < 3, interval progression
+- [x] Create `internal/service/study.go` — `StudyService`:
   - `StartSession(userID, deckID uint, mode string) ([]model.Card, error)` — mode is `"spaced"` or `"random"`
     - Spaced: query cards where `NextReviewAt <= now` and card belongs to user's deck
     - Random: fetch all cards in deck, shuffle using `math/rand`
   - `SubmitReview(userID, cardID uint, quality int) (*model.Card, error)` — only updates SM-2 state, call `sm2.Calculate`, update card in DB. No-op for random sessions (caller responsibility to not call this in random mode).
   - `CompleteSession(userID uint, points int) error` — add points to `user.TotalPoints`
-- [ ] Create `internal/handler/study.go` — requires JWT auth middleware:
+- [x] Create `internal/handler/study.go` — requires JWT auth middleware:
   - `POST /api/v1/decks/{id}/study` — body: `{mode: "spaced"|"random"}`, returns list of cards to review
   - `POST /api/v1/cards/{id}/review` — body: `{quality: 0-5}`, returns updated card with new SM-2 values
-- [ ] Write integration tests for both study modes, verifying SM-2 state updates in spaced mode and no state change in random mode
+- [x] Write integration tests for both study modes, verifying SM-2 state updates in spaced mode and no state change in random mode
 
 ---
 
@@ -235,7 +235,7 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Server-side streak tracking on login (may already be implemented in Phase 2 — verify and extract if needed).
 
-- [ ] Ensure streak calculation is isolated in a pure function (e.g., `internal/service/streak.go`):
+- [x] Ensure streak calculation is isolated in a pure function (e.g., `internal/service/streak.go`):
   ```go
   func CalculateStreak(lastLoginDate time.Time, currentStreak int, now time.Time) (newStreak int, newDate time.Time)
   ```
@@ -243,7 +243,7 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
   - Same calendar day as `now` → no change
   - Yesterday → streak + 1
   - Gap > 1 day → streak = 1
-- [ ] Write unit tests covering: first login, same day, consecutive day, gap, multi-day gap
+- [x] Write unit tests covering: first login, same day, consecutive day, gap, multi-day gap
 
 ---
 
