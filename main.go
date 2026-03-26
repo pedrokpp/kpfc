@@ -19,6 +19,7 @@ import (
 	"kpp.dev/kpfc/internal/config"
 	"kpp.dev/kpfc/internal/handler"
 	"kpp.dev/kpfc/internal/logger"
+	"kpp.dev/kpfc/internal/middleware"
 	"kpp.dev/kpfc/internal/model"
 	"kpp.dev/kpfc/internal/repository"
 	"kpp.dev/kpfc/internal/service"
@@ -77,8 +78,16 @@ func main() {
 	log.Debug("migrations applied")
 
 	userRepo := repository.NewGORMUserRepository(db)
+	deckRepo := repository.NewGORMDeckRepository(db)
+	cardRepo := repository.NewGORMCardRepository(db)
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
+	userSvc := service.NewUserService(userRepo)
+	deckSvc := service.NewDeckService(deckRepo)
+	cardSvc := service.NewCardService(cardRepo, deckRepo)
 	authHandler := handler.NewAuthHandler(authSvc)
+	userHandler := handler.NewUserHandler(userSvc)
+	deckHandler := handler.NewDeckHandler(deckSvc)
+	cardHandler := handler.NewCardHandler(cardSvc)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
@@ -91,6 +100,24 @@ func main() {
 
 	r.Post("/api/v1/auth/register", authHandler.Register)
 	r.Post("/api/v1/auth/login", authHandler.Login)
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth(authSvc))
+		r.Get("/api/v1/users/me", userHandler.GetMe)
+		r.Put("/api/v1/users/me", userHandler.UpdateMe)
+
+		r.Get("/api/v1/decks", deckHandler.List)
+		r.Post("/api/v1/decks", deckHandler.Create)
+		r.Get("/api/v1/decks/{id}", deckHandler.Get)
+		r.Put("/api/v1/decks/{id}", deckHandler.Update)
+		r.Delete("/api/v1/decks/{id}", deckHandler.Delete)
+
+		r.Get("/api/v1/decks/{id}/cards", cardHandler.ListByDeck)
+		r.Post("/api/v1/decks/{id}/cards", cardHandler.Create)
+		r.Get("/api/v1/cards/{id}", cardHandler.Get)
+		r.Put("/api/v1/cards/{id}", cardHandler.Update)
+		r.Delete("/api/v1/cards/{id}", cardHandler.Delete)
+	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	srv := &http.Server{

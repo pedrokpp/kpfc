@@ -146,14 +146,14 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Allow authenticated users to view and update their profile.
 
-- [ ] Create `internal/service/user.go` — `UserService`:
+- [x] Create `internal/service/user.go` — `UserService`:
   - `GetProfile(userID uint) (*model.User, error)`
   - `UpdateProfile(userID uint, displayName string) (*model.User, error)`
-- [ ] Create `internal/handler/user.go`:
+- [x] Create `internal/handler/user.go`:
   - `GET /api/v1/users/me` — returns current user profile (never return `PasswordHash`)
   - `PUT /api/v1/users/me` — body: `{display_name}`, returns updated profile
-- [ ] Both endpoints require the JWT auth middleware
-- [ ] Write tests for both endpoints (authenticated, unauthenticated)
+- [x] Both endpoints require the JWT auth middleware
+- [x] Write tests for both endpoints (authenticated, unauthenticated)
 
 ---
 
@@ -161,20 +161,20 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Full deck management with ownership enforcement.
 
-- [ ] Create `internal/service/deck.go` — `DeckService`:
+- [x] Create `internal/service/deck.go` — `DeckService`:
   - `Create(userID uint, title, description string, isPublic bool) (*model.Deck, error)`
   - `GetByID(userID, deckID uint) (*model.Deck, error)` — returns error if deck doesn't belong to user
   - `ListByUser(userID uint) ([]model.Deck, error)`
   - `Update(userID, deckID uint, title, description string, isPublic bool) (*model.Deck, error)` — ownership check
   - `Delete(userID, deckID uint) error` — ownership check
-- [ ] Create `internal/handler/deck.go` — all routes require JWT auth middleware:
+- [x] Create `internal/handler/deck.go` — all routes require JWT auth middleware:
   - `GET /api/v1/decks` — list user's decks
   - `POST /api/v1/decks` — create deck
   - `GET /api/v1/decks/{id}` — get single deck
   - `PUT /api/v1/decks/{id}` — update deck
   - `DELETE /api/v1/decks/{id}` — delete deck
-- [ ] Ownership enforcement: any operation on a deck by a user who is not the owner must return `403 Forbidden`
-- [ ] Write tests for all endpoints including ownership enforcement
+- [x] Ownership enforcement: any operation on a deck by a user who is not the owner must return `403 Forbidden`
+- [x] Write tests for all endpoints including ownership enforcement
 
 ---
 
@@ -182,19 +182,19 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Card management with deck ownership validation.
 
-- [ ] Create `internal/service/card.go` — `CardService`:
+- [x] Create `internal/service/card.go` — `CardService`:
   - `Create(userID, deckID uint, front, back string) (*model.Card, error)` — verify user owns the deck
   - `GetByID(userID, cardID uint) (*model.Card, error)` — verify user owns the card's deck
   - `ListByDeck(userID, deckID uint) ([]model.Card, error)` — verify user owns the deck
   - `Update(userID, cardID uint, front, back string) (*model.Card, error)` — ownership check
   - `Delete(userID, cardID uint) error` — ownership check
-- [ ] Create `internal/handler/card.go` — all routes require JWT auth middleware:
+- [x] Create `internal/handler/card.go` — all routes require JWT auth middleware:
   - `GET /api/v1/decks/{id}/cards` — list cards in a deck
   - `POST /api/v1/decks/{id}/cards` — add a card to a deck
   - `GET /api/v1/cards/{id}` — get single card
   - `PUT /api/v1/cards/{id}` — update card front/back
   - `DELETE /api/v1/cards/{id}` — delete card
-- [ ] Write tests for all card endpoints including deck ownership enforcement
+- [x] Write tests for all card endpoints including deck ownership enforcement
 
 ---
 
