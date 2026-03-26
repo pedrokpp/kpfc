@@ -84,10 +84,12 @@ func main() {
 	userSvc := service.NewUserService(userRepo)
 	deckSvc := service.NewDeckService(deckRepo)
 	cardSvc := service.NewCardService(cardRepo, deckRepo)
+	studySvc := service.NewStudyService(cardRepo, deckRepo, userRepo)
 	authHandler := handler.NewAuthHandler(authSvc)
 	userHandler := handler.NewUserHandler(userSvc)
 	deckHandler := handler.NewDeckHandler(deckSvc)
 	cardHandler := handler.NewCardHandler(cardSvc)
+	studyHandler := handler.NewStudyHandler(studySvc)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
@@ -117,6 +119,9 @@ func main() {
 		r.Get("/api/v1/cards/{id}", cardHandler.Get)
 		r.Put("/api/v1/cards/{id}", cardHandler.Update)
 		r.Delete("/api/v1/cards/{id}", cardHandler.Delete)
+
+		r.Post("/api/v1/decks/{id}/study", studyHandler.StartSession)
+		r.Post("/api/v1/cards/{id}/review", studyHandler.SubmitReview)
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
