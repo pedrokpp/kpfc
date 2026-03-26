@@ -90,6 +90,7 @@ func main() {
 	deckHandler := handler.NewDeckHandler(deckSvc)
 	cardHandler := handler.NewCardHandler(cardSvc)
 	studyHandler := handler.NewStudyHandler(studySvc)
+	publicHandler := handler.NewPublicHandler(deckSvc)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
@@ -102,6 +103,8 @@ func main() {
 
 	r.Post("/api/v1/auth/register", authHandler.Register)
 	r.Post("/api/v1/auth/login", authHandler.Login)
+
+	r.Get("/api/v1/public/decks", publicHandler.ListDecks)
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(authSvc))
@@ -122,6 +125,8 @@ func main() {
 
 		r.Post("/api/v1/decks/{id}/study", studyHandler.StartSession)
 		r.Post("/api/v1/cards/{id}/review", studyHandler.SubmitReview)
+
+		r.Post("/api/v1/decks/{id}/upvote", deckHandler.Upvote)
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

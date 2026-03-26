@@ -81,3 +81,32 @@ func (s *DeckService) Delete(userID, deckID uint) error {
 	}
 	return s.decks.Delete(deckID)
 }
+
+// ListPublic returns all public decks. sortBy accepts "upvotes" or defaults to newest first.
+func (s *DeckService) ListPublic(sortBy string) ([]model.Deck, error) {
+	return s.decks.FindPublic(sortBy)
+}
+
+// ToggleUpvote adds or removes an upvote on a public deck.
+// Returns ErrForbidden if the user owns the deck or the deck is not public.
+func (s *DeckService) ToggleUpvote(userID, deckID uint) error {
+	deck, err := s.decks.FindByID(deckID)
+	if err != nil {
+		return err
+	}
+	if deck.UserID == userID {
+		return ErrForbidden
+	}
+	if !deck.IsPublic {
+		return ErrForbidden
+	}
+
+	has, err := s.decks.HasUpvoted(userID, deckID)
+	if err != nil {
+		return err
+	}
+	if has {
+		return s.decks.RemoveUpvote(userID, deckID)
+	}
+	return s.decks.AddUpvote(userID, deckID)
+}

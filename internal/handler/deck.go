@@ -172,6 +172,37 @@ func (h *DeckHandler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, deckResponse(deck))
 }
 
+// Upvote handles POST /api/v1/decks/{id}/upvote — toggles an upvote on a public deck.
+func (h *DeckHandler) Upvote(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	deckID, ok := parseDeckID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid deck id")
+		return
+	}
+
+	err := h.decks.ToggleUpvote(userID, deckID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "deck not found")
+			return
+		}
+		if errors.Is(err, service.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to toggle upvote")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // Delete handles DELETE /api/v1/decks/{id}
 func (h *DeckHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())

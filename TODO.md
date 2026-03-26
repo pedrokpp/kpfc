@@ -251,18 +251,18 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Enable deck discovery and community upvoting.
 
-- [ ] Implement `DeckRepository.FindPublic(sortBy string) ([]model.Deck, error)`:
+- [x] Implement `DeckRepository.FindPublic(sortBy string) ([]model.Deck, error)`:
   - Returns decks where `IsPublic = true`
   - `sortBy = "upvotes"` → order by `UpvoteCount DESC`; default → order by `CreatedAt DESC`
-- [ ] Implement upvote toggle in `DeckService`:
+- [x] Implement upvote toggle in `DeckService`:
   - `ToggleUpvote(userID, deckID uint) error` — check `UserDeckUpvote` table; if exists, remove and decrement `UpvoteCount`; if not, insert and increment `UpvoteCount`
   - Use a DB transaction to ensure consistency between the join table and the counter
-- [ ] Create `internal/service/public.go` (or add to `DeckService`) — `ListPublicDecks(sortBy string) ([]model.Deck, error)`
-- [ ] Create `internal/handler/public.go` — **no auth required**:
+- [x] Create `internal/service/public.go` (or add to `DeckService`) — `ListPublicDecks(sortBy string) ([]model.Deck, error)`
+- [x] Create `internal/handler/public.go` — **no auth required**:
   - `GET /api/v1/public/decks` — query param `?sort=upvotes`, returns public decks
-- [ ] Add to `internal/handler/deck.go` — requires JWT auth:
+- [x] Add to `internal/handler/deck.go` — requires JWT auth:
   - `POST /api/v1/decks/{id}/upvote` — toggle upvote; only works on public decks; user cannot upvote their own deck
-- [ ] Write tests: listing public decks, upvote toggle (add, remove, idempotent), upvote count accuracy
+- [x] Write tests: listing public decks, upvote toggle (add, remove, idempotent), upvote count accuracy
 
 ---
 
