@@ -13,7 +13,7 @@ import (
 // Supported field types: string, int, bool.
 type Config struct {
 	Port      int    `env:"PORT"       default_value:"8080"`
-	DBPath    string `env:"DB_PATH"    default_value:"./kpfc.db"`
+	DatabaseURL string `env:"DATABASE_URL" default_value:""`
 	JWTSecret string `env:"JWT_SECRET" default_value:""`
 }
 

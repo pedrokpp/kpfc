@@ -1,12 +1,26 @@
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: kpfc
+      POSTGRES_PASSWORD: kpfc
+      POSTGRES_DB: kpfc
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   kpfc:
     build:
       context: .
       dockerfile: docker/Dockerfile
     ports:
       - "8080:8080"
-    volumes:
-      - ./data:/data
     env_file:
       - .env.docker
+    depends_on:
+      db:
+        condition: service_started
     restart: unless-stopped
+
+volumes:
+  pgdata:

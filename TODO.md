@@ -312,9 +312,9 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Support [PostgreSQL](https://www.postgresql.org) as an alternative database backend for production scale.
 
-- [ ] Add `gorm.io/driver/postgres` dependency
-- [ ] Update `internal/config/` — add `DBDriver` field (values: `"sqlite"`, `"postgres"`) and `DBConnectionString` for Postgres DSN
-- [ ] Update `main.go` — open DB connection based on `config.DBDriver`
-- [ ] Verify all repository operations work correctly with PostgreSQL (data types, index behavior, timestamp handling)
-- [ ] Ensure `docker-compose.yml` can be extended with a PostgreSQL service (document this in README)
-- [ ] Run full integration test suite against PostgreSQL and resolve any dialect-specific issues
+- [x] Add `gorm.io/driver/postgres` dependency
+- [x] Update `internal/config/` — add `DBDriver` field (values: `"sqlite"`, `"postgres"`) and `DBConnectionString` for Postgres DSN
+- [x] Update `main.go` — open DB connection based on `config.DBDriver`
+- [x] Verify all repository operations work correctly with PostgreSQL (data types, index behavior, timestamp handling)
+- [x] Ensure `docker-compose.yml` can be extended with a PostgreSQL service (document this in README)
+- [x] Run full integration test suite against PostgreSQL and resolve any dialect-specific issues

@@ -8,7 +8,7 @@ import (
 
 func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("PORT", "")
-	t.Setenv("DB_PATH", "")
+	t.Setenv("DATABASE_URL", "")
 	t.Setenv("JWT_SECRET", "")
 
 	cfg, err := config.Load()
@@ -18,8 +18,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Port != 8080 {
 		t.Errorf("Port default: got %d, want 8080", cfg.Port)
 	}
-	if cfg.DBPath != "./kpfc.db" {
-		t.Errorf("DBPath default: got %q, want ./kpfc.db", cfg.DBPath)
+	if cfg.DatabaseURL != "" {
+		t.Errorf("DatabaseURL default: got %q, want empty", cfg.DatabaseURL)
 	}
 	if cfg.JWTSecret != "" {
 		t.Errorf("JWTSecret default: got %q, want empty", cfg.JWTSecret)
@@ -28,7 +28,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 func TestLoad_EnvOverrides(t *testing.T) {
 	t.Setenv("PORT", "9090")
-	t.Setenv("DB_PATH", "/tmp/test.db")
+	t.Setenv("DATABASE_URL", "postgres://u:p@localhost/testdb")
 	t.Setenv("JWT_SECRET", "supersecret")
 
 	cfg, err := config.Load()
@@ -38,8 +38,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	if cfg.Port != 9090 {
 		t.Errorf("Port: got %d, want 9090", cfg.Port)
 	}
-	if cfg.DBPath != "/tmp/test.db" {
-		t.Errorf("DBPath: got %q, want /tmp/test.db", cfg.DBPath)
+	if cfg.DatabaseURL != "postgres://u:p@localhost/testdb" {
+		t.Errorf("DatabaseURL: got %q, want postgres://u:p@localhost/testdb", cfg.DatabaseURL)
 	}
 	if cfg.JWTSecret != "supersecret" {
 		t.Errorf("JWTSecret: got %q, want supersecret", cfg.JWTSecret)

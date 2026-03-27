@@ -28,14 +28,6 @@ bin/
 !.env.docker.example
 !.env.local.example
 
-# SQLite database files
-*.db
-*.db-shm
-*.db-wal
-
-# Docker data volumes
-data/
-
 # OS artifacts
 .DS_Store
 Thumbs.db

@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"kpp.dev/kpfc/internal/config"
@@ -57,14 +57,19 @@ func main() {
 		log.Warn("JWT_SECRET is not set — authentication will not work correctly")
 	}
 
-	log.Debug("config loaded", "port", cfg.Port, "db_path", cfg.DBPath)
+	log.Debug("config loaded", "port", cfg.Port, "database", "configured")
 
-	db, err := gorm.Open(sqlite.Open(cfg.DBPath), &gorm.Config{})
+	if cfg.DatabaseURL == "" {
+		log.Error("DATABASE_URL is not set")
+		os.Exit(1)
+	}
+
+	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
 	if err != nil {
 		log.Error("failed to open database", "err", err)
 		os.Exit(1)
 	}
-	log.Info("database connected", "path", cfg.DBPath)
+	log.Info("database connected", "driver", "postgres")
 
 	if err := db.AutoMigrate(
 		&model.User{},
