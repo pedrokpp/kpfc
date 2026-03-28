@@ -268,26 +268,156 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 ## Phase 9: Anki `.apkg` Import
 
-**Objective**: Allow users to import Anki decks, enabling migration to KPFC.
+**Objective**: Allow users to import Anki decks with support for multiple card types and media, enabling full migration from Anki to KPFC. Each sub-phase is additive — existing tests and API contracts must never break.
+
+### Phase 9.1: Card Type Support
+
+**Objective**: Extend the Card model to support multiple card types (basic, cloze). All changes are backward-compatible: new fields use defaults, existing service/handler signatures are preserved, existing tests pass unmodified.
+
+- [x] Update `internal/model/card.go` — add **new fields** to `Card` struct (GORM AutoMigrate adds columns with defaults, no data loss):
+  - `CardType string` with `gorm:"default:'basic';not null"` — values: `"basic"`, `"cloze"`
+  - `ClozeIndex int` with `gorm:"default:0"` — for cloze cards: which cloze number this card represents (1-based, e.g. `c1` → 1). Ignored for basic cards.
+  - `Extra string` — optional extra context field (maps to Anki's "Extra" field in cloze notes). Empty string for basic cards.
+- [x] Create `pkg/cloze/cloze.go` — **new package**, pure cloze-parsing functions with no external dependencies:
+  - `Deletion` struct: `Index int`, `Answer string`, `Hint string`
+  - `Parse(text string) []Deletion` — extract all `{{cN::answer::hint}}` patterns
+  - `Render(text string, activeIndex int) (front, back string)` — render cloze text for a specific card:
+    - Active cloze (matching `activeIndex`): front replaces with `[...]` or `[hint]` if hint exists; back replaces with `<b>answer</b>`
+    - Inactive clozes (different index): both sides show plain `answer` text
+  - `Indices(text string) []int` — return sorted unique cloze numbers found in text
+  - Regex pattern: `\{\{c(\d+)::([^}]*?)(?:::([^}]*?))?\}\}`
+- [x] Write thorough unit tests for `pkg/cloze/`: single cloze, multiple clozes, cloze with hint, same-index multiple regions, non-sequential indices (c1, c3 but no c2), text with no clozes
+- [x] **Keep `CardService.Create(userID, deckID, front, back)` signature unchanged** — it continues to create basic cards. Add a **new method** `CreateAdvanced(userID, deckID uint, opts CardCreateOpts) (*model.Card, error)` where `CardCreateOpts` struct contains `Front, Back, CardType, ClozeIndex, Extra string` with validation per card type:
+  - Basic: requires non-empty `Front` and `Back`
+  - Cloze: requires at least one `{{c1::...}}` pattern in `Front`; `Back` is ignored (rendered dynamically); `ClozeIndex` must be > 0
+- [x] Update `internal/handler/card.go` **additively**:
+  - `cardResponse` — include `"card_type"`, `"cloze_index"`, `"extra"` in JSON output (new keys added, no keys removed)
+  - Create endpoint: accept **optional** `card_type` in request body. If absent or `"basic"` → use existing `CardService.Create` path. If `"cloze"` → use `CardService.CreateAdvanced`. This means existing API clients sending `{"front","back"}` continue to work with zero changes.
+  - Update endpoint: accept **optional** `card_type`, `extra`. Preserve same backward-compat logic.
+- [x] Run `go test ./...` — all existing tests must pass without modification. Write **new** tests in `internal/handler/card_test.go` covering:
+  - Creating/updating cloze cards with valid and invalid cloze text
+  - `card_type`, `cloze_index`, `extra` present in all card JSON responses
+  - Default `card_type` is `"basic"` when omitted
+
+### Phase 9.2: Media Model and Upload
+
+**Objective**: Support image and audio uploads with a storage-abstraction layer. Local filesystem for now, designed with an interface to swap for S3/GCS later without touching service or handler code.
+
+- [ ] Create `internal/storage/storage.go` — **storage interface** and local implementation:
+  ```go
+  type Storage interface {
+    Store(ctx context.Context, path string, r io.Reader) error
+    Fetch(ctx context.Context, path string) (io.ReadCloser, error)
+    Delete(ctx context.Context, path string) error
+  }
+  ```
+  - Implement `LocalStorage` struct: `root string` (base directory). `Store` writes to `root/path` (creating parent dirs as needed). `Fetch` returns `os.Open`. `Delete` removes the file.
+  - Future implementations (S3Storage, GCSStorage) will satisfy the same interface — service layer never imports `os` or touches the filesystem directly.
+- [ ] Write unit tests for `LocalStorage`: store/fetch/delete, non-existent path fetch returns error, nested path creation
+- [ ] Create `internal/model/media.go` — `Media` struct:
+  ```go
+  type Media struct {
+    ID          uint      `gorm:"primaryKey"`
+    UserID      uint      `gorm:"not null;index"`
+    Filename    string    `gorm:"not null"`
+    ContentType string    `gorm:"not null"`
+    Size        int64     `gorm:"not null"`
+    StoragePath string    `gorm:"not null"` // key passed to Storage interface
+    CreatedAt   time.Time
+  }
+  ```
+- [ ] Add `MediaRoot string` to `internal/config/config.go` — env `MEDIA_ROOT`, default `"./media"`. **Additive change**: new field with default, existing config tests still pass.
+- [ ] Update `main.go` — auto-migrate `model.Media`, instantiate `LocalStorage` with `cfg.MediaRoot`, wire up media service and handler. Create `MediaRoot` directory on startup if it doesn't exist.
+- [ ] Update `docker-compose.yml` — add named volume `mediadata:/media` to `kpfc` service. Update `.env.docker` with `MEDIA_ROOT=/media`.
+- [ ] Define `MediaRepository` in `internal/repository/interfaces.go` (additive — new interface, existing ones untouched):
+  - `Create(media *model.Media) error`
+  - `FindByID(id uint) (*model.Media, error)`
+  - `FindByUserID(userID uint) ([]model.Media, error)`
+  - `Delete(id uint) error`
+- [ ] Implement `internal/repository/gorm_media.go` — `GORMMediaRepository`
+- [ ] Create `internal/service/media.go` — `MediaService` (receives `Storage` interface + `MediaRepository`):
+  - `Upload(userID uint, filename string, contentType string, size int64, reader io.Reader) (*model.Media, error)`:
+    - Validate content type (allow: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, `audio/mpeg`, `audio/mp4`)
+    - Validate size (max 10MB)
+    - Generate storage path: `{userID}/{uuid}.{ext}`
+    - Call `storage.Store(ctx, storagePath, reader)` — **never** `os.Create` directly
+    - Create DB record
+  - `GetByID(id uint) (*model.Media, io.ReadCloser, error)` — look up record, call `storage.Fetch`
+  - `Delete(userID, mediaID uint) error` — ownership check, `storage.Delete`, delete DB record
+- [ ] Create `internal/handler/media.go` — requires JWT auth:
+  - `POST /api/v1/media` — multipart form upload, field name `file`. Response: `{id, filename, content_type, size, url}`
+  - `GET /api/v1/media/{id}` — serve the file directly (set `Content-Type`, `Cache-Control` headers). **No auth required** (files served by ID, enables embedding in cards).
+  - `DELETE /api/v1/media/{id}` — requires auth, ownership check
+- [ ] Register routes in `main.go`:
+  - Public: `GET /api/v1/media/{id}`
+  - Auth-protected: `POST /api/v1/media`, `DELETE /api/v1/media/{id}`
+- [ ] Write tests for media upload (valid file, invalid type, size limit), retrieval, and deletion. Tests use `LocalStorage` with a temp directory.
+
+### Phase 9.3: Basic Anki Import
+
+**Objective**: Import Basic (front/back) cards from `.apkg` files, detecting note types via Anki's model metadata. Cloze notes are skipped (handled in 9.4).
 
 - [ ] Create `internal/service/import.go` — `ImportService`:
-  - `ImportAPKG(userID uint, fileData []byte, deckTitle string) (*model.Deck, int, error)` — returns created deck and number of cards imported
+  - `ImportAPKG(userID uint, fileData []byte, deckTitle string) (*ImportResult, error)`
+  - `ImportResult` struct: `Deck *model.Deck`, `CardsImported int`, `CardsSkipped int`, `SkippedTypes []string`
   - Process:
-    1. Write `fileData` to a temp file (or use `archive/zip` from memory)
-    2. Open as ZIP using `archive/zip`
-    3. Find and extract `collection.anki2` (or `collection.anki21`) — the embedded SQLite database
-    4. Open extracted SQLite with GORM or `database/sql` + SQLite driver
-    5. Query Anki's `notes` table: `SELECT flds FROM notes`
-    6. Split `flds` on `\x1f` (U+001F, unit separator character) — `fields[0]` = Front, `fields[1]` = Back
-    7. Create a new `Deck` for the user with `Title = deckTitle`
-    8. Bulk-insert `Card` records, setting `EaseFactor = 2.5`, `Interval = 1`, `NextReviewAt = now`
-    9. Clean up temp files
+    1. Open `fileData` as ZIP using `archive/zip` (via `bytes.Reader`, no temp file for the ZIP itself)
+    2. Find SQLite file: prefer `collection.anki21`, fall back to `collection.anki2`. Return error if neither found. Skip `collection.anki21b` (protobuf format — not supported).
+    3. Write SQLite file to a temp file (required for `go-sqlite3` to open it), defer cleanup
+    4. Open with `gorm.io/driver/sqlite` (already a dependency — used in tests)
+    5. Read `col` table → parse `models` JSON to build map: `modelID → {name, type, fields[], templates[]}`
+    6. Query: `SELECT n.id, n.mid, n.flds FROM notes n`
+    7. For each note, look up model by `mid`:
+       - **Standard (type 0)**: split `flds` on `\x1f`, map to model's field names by ordinal. Find fields named `Front`/`Back` (case-insensitive). If model has 2+ templates, create one card per template (forward + reverse for "Basic and reversed"). Set `CardType = "basic"`.
+       - **Cloze (type 1)**: skip for now. Increment `CardsSkipped`, add model name to `SkippedTypes`.
+    8. Create `Deck` with `Title = deckTitle` (or Anki deck name from `col.decks` JSON if deckTitle is empty)
+    9. Bulk-insert cards with default SM-2 values (`EaseFactor = 2.5`, `Interval = 1`, `NextReviewAt = now`)
+- [ ] Add `BulkCreate(cards []model.Card) error` to `CardRepository` interface and implement in `gorm_card.go` — use `db.CreateInBatches(cards, 100)`. **Additive**: new method on existing interface, no existing code calls it.
 - [ ] Create `internal/handler/import.go` — requires JWT auth:
   - `POST /api/v1/import/apkg` — multipart form upload, field name `file`, optional field `deck_title` (defaults to filename without extension)
-  - Max upload size: 50MB
-  - Response: `{deck_id, deck_title, cards_imported}`
-- [ ] Add a fixture `.apkg` file to `test/` for testing (a minimal valid Anki package)
-- [ ] Write integration tests for import: valid `.apkg`, invalid ZIP, empty notes table
+  - Max upload size: 50MB (enforce with `http.MaxBytesReader`)
+  - Response: `{deck_id, deck_title, cards_imported, cards_skipped, skipped_types}`
+- [ ] Register route in `main.go`: `POST /api/v1/import/apkg` (auth-protected)
+- [ ] Create test fixtures in `testdata/`:
+  - `basic.apkg` — minimal valid Anki package with a few Basic front/back cards
+  - `empty.apkg` — valid package with no notes
+  - `invalid.zip` — a ZIP file that is not a valid `.apkg`
+- [ ] Write integration tests: valid import (basic cards), empty deck, invalid ZIP, missing SQLite file, deck title override vs. Anki deck name
+
+### Phase 9.4: Cloze Card Import
+
+**Objective**: Extend the Anki importer to handle cloze deletion notes, generating one KPFC card per cloze number.
+
+- [ ] Update `internal/service/import.go` — handle cloze notes (model `type == 1`):
+  - For each cloze note: read the text field (first field by convention, or field referenced by `{{cloze:FieldName}}` in the model's template `qfmt`)
+  - Use `pkg/cloze.Indices(text)` to find all unique cloze numbers
+  - For each cloze number N, create one `Card`:
+    - `CardType = "cloze"`
+    - `Front = raw cloze text` (full text with `{{cN::...}}` markup preserved — frontend renders it using the cloze package logic)
+    - `Back = ""` (rendered dynamically by frontend)
+    - `ClozeIndex = N`
+    - `Extra = second field value` (if present — Anki cloze notes typically have an "Extra" second field)
+  - Remove cloze from `SkippedTypes`, update `CardsImported` count
+- [ ] Create test fixture `testdata/cloze.apkg` — Anki package with cloze notes (single and multi-cloze)
+- [ ] Write tests: cloze import (single c1, multi c1+c2+c3), cloze with hints, cloze with extra field
+
+### Phase 9.5: Media Import from `.apkg`
+
+**Objective**: Extract and store media files (images, audio) from `.apkg` archives and rewrite references in imported cards. Uses the `Storage` interface from Phase 9.2.
+
+- [ ] Update `internal/service/import.go` — media extraction:
+  - Read the `media` JSON file from the ZIP → build map: `numericKey → originalFilename`
+  - For each media entry: read the file from the ZIP (named `0`, `1`, `2`, etc.)
+  - Detect content type via `http.DetectContentType` on the first 512 bytes
+  - Store via `MediaService.Upload` (reuses the `Storage` interface — works with local FS now, cloud buckets later)
+  - Build a rewrite map: `originalFilename → /api/v1/media/{newID}`
+- [ ] After storing all media, rewrite references in card `Front`, `Back`, and `Extra` fields before bulk insert:
+  - HTML image tags: replace `src="originalFilename"` with `src="/api/v1/media/{id}"`
+  - Anki audio syntax: convert `[sound:filename.mp3]` to `<audio src="/api/v1/media/{id}" controls></audio>`
+- [ ] Update `ImportResult` — add `MediaImported int`
+- [ ] Update handler response to include `media_imported` count
+- [ ] Create test fixture `testdata/with_media.apkg` — Anki package with an embedded image and audio file
+- [ ] Write tests: media extraction, URL rewriting in card content, import with mixed media types, media stored via `Storage` interface (not direct filesystem calls)
 
 ---
 

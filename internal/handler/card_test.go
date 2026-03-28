@@ -325,6 +325,106 @@ func TestUpdateCard_Unauthenticated(t *testing.T) {
 	}
 }
 
+// --- card_type in responses ---
+
+func TestCardResponse_HasCardTypeField(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "alice@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+	cardID := createCard(t, r, token, deckID, "Q", "A")
+
+	w := getWithToken(r, fmt.Sprintf("/api/v1/cards/%.0f", cardID), token)
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["card_type"] != "basic" {
+		t.Errorf("card_type = %v, want 'basic'", resp["card_type"])
+	}
+	if _, ok := resp["cloze_index"]; !ok {
+		t.Error("expected cloze_index in response")
+	}
+	if _, ok := resp["extra"]; !ok {
+		t.Error("expected extra in response")
+	}
+}
+
+// --- cloze card creation ---
+
+func TestCreateClozeCard_Success(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "alice@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+
+	w := postJSONWithToken(r, fmt.Sprintf("/api/v1/decks/%.0f/cards", deckID), map[string]any{
+		"front":       "{{c1::Paris}} is the capital of France",
+		"card_type":   "cloze",
+		"cloze_index": 1,
+		"extra":       "Geography",
+	}, token)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body)
+	}
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["card_type"] != "cloze" {
+		t.Errorf("card_type = %v, want 'cloze'", resp["card_type"])
+	}
+	if resp["cloze_index"] != float64(1) {
+		t.Errorf("cloze_index = %v, want 1", resp["cloze_index"])
+	}
+	if resp["extra"] != "Geography" {
+		t.Errorf("extra = %v, want 'Geography'", resp["extra"])
+	}
+}
+
+func TestCreateClozeCard_InvalidClozeText(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "alice@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+
+	// Front has no cloze markers
+	w := postJSONWithToken(r, fmt.Sprintf("/api/v1/decks/%.0f/cards", deckID), map[string]any{
+		"front":       "plain text, no cloze",
+		"card_type":   "cloze",
+		"cloze_index": 1,
+	}, token)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestCreateClozeCard_MismatchedIndex(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "alice@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+
+	// Text has c1 but cloze_index says 2
+	w := postJSONWithToken(r, fmt.Sprintf("/api/v1/decks/%.0f/cards", deckID), map[string]any{
+		"front":       "{{c1::Paris}} is the capital",
+		"card_type":   "cloze",
+		"cloze_index": 2,
+	}, token)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestCreateClozeCard_InvalidCardType(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "alice@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+
+	w := postJSONWithToken(r, fmt.Sprintf("/api/v1/decks/%.0f/cards", deckID), map[string]any{
+		"front":     "Q",
+		"back":      "A",
+		"card_type": "unknown_type",
+	}, token)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
 // --- DELETE /api/v1/cards/{id} ---
 
 func TestDeleteCard_Success(t *testing.T) {

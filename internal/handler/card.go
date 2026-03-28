@@ -28,6 +28,9 @@ func cardResponse(c *model.Card) map[string]any {
 		"deck_id":        c.DeckID,
 		"front":          c.Front,
 		"back":           c.Back,
+		"card_type":      c.CardType,
+		"cloze_index":    c.ClozeIndex,
+		"extra":          c.Extra,
 		"interval":       c.Interval,
 		"repetitions":    c.Repetitions,
 		"ease_factor":    c.EaseFactor,
@@ -100,19 +103,43 @@ func (h *CardHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Front string `json:"front"`
-		Back  string `json:"back"`
+		Front      string `json:"front"`
+		Back       string `json:"back"`
+		CardType   string `json:"card_type"`
+		ClozeIndex int    `json:"cloze_index"`
+		Extra      string `json:"extra"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Front == "" || req.Back == "" {
-		writeError(w, http.StatusBadRequest, "front and back are required")
-		return
+
+	if req.CardType == "" {
+		req.CardType = "basic"
 	}
 
-	card, err := h.cards.Create(userID, deckID, req.Front, req.Back)
+	var card *model.Card
+	var err error
+
+	if req.CardType == "basic" {
+		if req.Front == "" || req.Back == "" {
+			writeError(w, http.StatusBadRequest, "front and back are required")
+			return
+		}
+		card, err = h.cards.Create(userID, deckID, req.Front, req.Back)
+	} else {
+		card, err = h.cards.CreateAdvanced(userID, deckID, service.CardCreateOpts{
+			Front:      req.Front,
+			Back:       req.Back,
+			CardType:   req.CardType,
+			ClozeIndex: req.ClozeIndex,
+			Extra:      req.Extra,
+		})
+		if errors.Is(err, service.ErrInvalidCloze) || errors.Is(err, service.ErrInvalidCardType) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if err != nil {
 		cardError(w, err)
 		return
@@ -159,19 +186,43 @@ func (h *CardHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Front string `json:"front"`
-		Back  string `json:"back"`
+		Front      string `json:"front"`
+		Back       string `json:"back"`
+		CardType   string `json:"card_type"`
+		ClozeIndex int    `json:"cloze_index"`
+		Extra      string `json:"extra"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Front == "" || req.Back == "" {
-		writeError(w, http.StatusBadRequest, "front and back are required")
-		return
+
+	if req.CardType == "" {
+		req.CardType = "basic"
 	}
 
-	card, err := h.cards.Update(userID, cardID, req.Front, req.Back)
+	var card *model.Card
+	var err error
+
+	if req.CardType == "basic" {
+		if req.Front == "" || req.Back == "" {
+			writeError(w, http.StatusBadRequest, "front and back are required")
+			return
+		}
+		card, err = h.cards.Update(userID, cardID, req.Front, req.Back)
+	} else {
+		card, err = h.cards.UpdateAdvanced(userID, cardID, service.CardCreateOpts{
+			Front:      req.Front,
+			Back:       req.Back,
+			CardType:   req.CardType,
+			ClozeIndex: req.ClozeIndex,
+			Extra:      req.Extra,
+		})
+		if errors.Is(err, service.ErrInvalidCloze) || errors.Is(err, service.ErrInvalidCardType) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if err != nil {
 		cardError(w, err)
 		return

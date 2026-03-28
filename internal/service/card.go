@@ -1,9 +1,43 @@
 package service
 
 import (
+	"errors"
+	"slices"
+
 	"kpp.dev/kpfc/internal/model"
 	"kpp.dev/kpfc/internal/repository"
+	"kpp.dev/kpfc/pkg/cloze"
 )
+
+var (
+	ErrInvalidCardType = errors.New("invalid card type: must be 'basic' or 'cloze'")
+	ErrInvalidCloze    = errors.New("cloze card front must contain at least one {{cN::...}} deletion with a matching cloze_index")
+)
+
+// CardCreateOpts holds parameters for CreateAdvanced and UpdateAdvanced.
+type CardCreateOpts struct {
+	Front      string
+	Back       string
+	CardType   string
+	ClozeIndex int
+	Extra      string
+}
+
+func validateCardOpts(opts CardCreateOpts) error {
+	switch opts.CardType {
+	case "basic":
+		if opts.Front == "" || opts.Back == "" {
+			return errors.New("front and back are required")
+		}
+	case "cloze":
+		if opts.ClozeIndex <= 0 || !slices.Contains(cloze.Indices(opts.Front), opts.ClozeIndex) {
+			return ErrInvalidCloze
+		}
+	default:
+		return ErrInvalidCardType
+	}
+	return nil
+}
 
 // CardService handles card management operations.
 type CardService struct {
@@ -90,4 +124,52 @@ func (s *CardService) Delete(userID, cardID uint) error {
 		return err
 	}
 	return s.cards.Delete(cardID)
+}
+
+// CreateAdvanced adds a new card with explicit card type and extra fields.
+// Returns ErrForbidden if userID doesn't own the deck.
+// Returns ErrInvalidCardType or ErrInvalidCloze on invalid opts.
+func (s *CardService) CreateAdvanced(userID, deckID uint, opts CardCreateOpts) (*model.Card, error) {
+	if _, err := s.ownerDeck(userID, deckID); err != nil {
+		return nil, err
+	}
+	if err := validateCardOpts(opts); err != nil {
+		return nil, err
+	}
+	card := &model.Card{
+		DeckID:     deckID,
+		Front:      opts.Front,
+		Back:       opts.Back,
+		CardType:   opts.CardType,
+		ClozeIndex: opts.ClozeIndex,
+		Extra:      opts.Extra,
+		EaseFactor: 2.5,
+		Interval:   1,
+	}
+	if err := s.cards.Create(card); err != nil {
+		return nil, err
+	}
+	return card, nil
+}
+
+// UpdateAdvanced changes a card's content with explicit card type and extra fields.
+// Returns ErrForbidden if userID doesn't own the card's deck.
+// Returns ErrInvalidCardType or ErrInvalidCloze on invalid opts.
+func (s *CardService) UpdateAdvanced(userID, cardID uint, opts CardCreateOpts) (*model.Card, error) {
+	card, err := s.ownerCard(userID, cardID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCardOpts(opts); err != nil {
+		return nil, err
+	}
+	card.Front = opts.Front
+	card.Back = opts.Back
+	card.CardType = opts.CardType
+	card.ClozeIndex = opts.ClozeIndex
+	card.Extra = opts.Extra
+	if err := s.cards.Update(card); err != nil {
+		return nil, err
+	}
+	return card, nil
 }
