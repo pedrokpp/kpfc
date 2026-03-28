@@ -303,7 +303,7 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 
 **Objective**: Support image and audio uploads with a storage-abstraction layer. Local filesystem for now, designed with an interface to swap for S3/GCS later without touching service or handler code.
 
-- [ ] Create `internal/storage/storage.go` — **storage interface** and local implementation:
+- [x] Create `internal/storage/storage.go` — **storage interface** and local implementation:
   ```go
   type Storage interface {
     Store(ctx context.Context, path string, r io.Reader) error
@@ -313,8 +313,8 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
   ```
   - Implement `LocalStorage` struct: `root string` (base directory). `Store` writes to `root/path` (creating parent dirs as needed). `Fetch` returns `os.Open`. `Delete` removes the file.
   - Future implementations (S3Storage, GCSStorage) will satisfy the same interface — service layer never imports `os` or touches the filesystem directly.
-- [ ] Write unit tests for `LocalStorage`: store/fetch/delete, non-existent path fetch returns error, nested path creation
-- [ ] Create `internal/model/media.go` — `Media` struct:
+- [x] Write unit tests for `LocalStorage`: store/fetch/delete, non-existent path fetch returns error, nested path creation
+- [x] Create `internal/model/media.go` — `Media` struct:
   ```go
   type Media struct {
     ID          uint      `gorm:"primaryKey"`
@@ -326,16 +326,16 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
     CreatedAt   time.Time
   }
   ```
-- [ ] Add `MediaRoot string` to `internal/config/config.go` — env `MEDIA_ROOT`, default `"./media"`. **Additive change**: new field with default, existing config tests still pass.
-- [ ] Update `main.go` — auto-migrate `model.Media`, instantiate `LocalStorage` with `cfg.MediaRoot`, wire up media service and handler. Create `MediaRoot` directory on startup if it doesn't exist.
-- [ ] Update `docker-compose.yml` — add named volume `mediadata:/media` to `kpfc` service. Update `.env.docker` with `MEDIA_ROOT=/media`.
-- [ ] Define `MediaRepository` in `internal/repository/interfaces.go` (additive — new interface, existing ones untouched):
+- [x] Add `MediaRoot string` to `internal/config/config.go` — env `MEDIA_ROOT`, default `"./media"`. **Additive change**: new field with default, existing config tests still pass.
+- [x] Update `main.go` — auto-migrate `model.Media`, instantiate `LocalStorage` with `cfg.MediaRoot`, wire up media service and handler. Create `MediaRoot` directory on startup if it doesn't exist.
+- [x] Update `docker-compose.yml` — add named volume `mediadata:/media` to `kpfc` service. Update `.env.docker` with `MEDIA_ROOT=/media`.
+- [x] Define `MediaRepository` in `internal/repository/interfaces.go` (additive — new interface, existing ones untouched):
   - `Create(media *model.Media) error`
   - `FindByID(id uint) (*model.Media, error)`
   - `FindByUserID(userID uint) ([]model.Media, error)`
   - `Delete(id uint) error`
-- [ ] Implement `internal/repository/gorm_media.go` — `GORMMediaRepository`
-- [ ] Create `internal/service/media.go` — `MediaService` (receives `Storage` interface + `MediaRepository`):
+- [x] Implement `internal/repository/gorm_media.go` — `GORMMediaRepository`
+- [x] Create `internal/service/media.go` — `MediaService` (receives `Storage` interface + `MediaRepository`):
   - `Upload(userID uint, filename string, contentType string, size int64, reader io.Reader) (*model.Media, error)`:
     - Validate content type (allow: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, `audio/mpeg`, `audio/mp4`)
     - Validate size (max 10MB)
@@ -344,14 +344,14 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
     - Create DB record
   - `GetByID(id uint) (*model.Media, io.ReadCloser, error)` — look up record, call `storage.Fetch`
   - `Delete(userID, mediaID uint) error` — ownership check, `storage.Delete`, delete DB record
-- [ ] Create `internal/handler/media.go` — requires JWT auth:
+- [x] Create `internal/handler/media.go` — requires JWT auth:
   - `POST /api/v1/media` — multipart form upload, field name `file`. Response: `{id, filename, content_type, size, url}`
   - `GET /api/v1/media/{id}` — serve the file directly (set `Content-Type`, `Cache-Control` headers). **No auth required** (files served by ID, enables embedding in cards).
   - `DELETE /api/v1/media/{id}` — requires auth, ownership check
-- [ ] Register routes in `main.go`:
+- [x] Register routes in `main.go`:
   - Public: `GET /api/v1/media/{id}`
   - Auth-protected: `POST /api/v1/media`, `DELETE /api/v1/media/{id}`
-- [ ] Write tests for media upload (valid file, invalid type, size limit), retrieval, and deletion. Tests use `LocalStorage` with a temp directory.
+- [x] Write tests for media upload (valid file, invalid type, size limit), retrieval, and deletion. Tests use `LocalStorage` with a temp directory.
 
 ### Phase 9.3: Basic Anki Import
 

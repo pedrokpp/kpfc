@@ -17,6 +17,8 @@ services:
       - "8080:8080"
     env_file:
       - .env.docker
+    volumes:
+      - mediadata:/media
     depends_on:
       db:
         condition: service_started
@@ -24,3 +26,4 @@ services:
 
 volumes:
   pgdata:
+  mediadata:

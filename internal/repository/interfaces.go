@@ -33,6 +33,14 @@ type DeckRepository interface {
 	RemoveUpvote(userID, deckID uint) error
 }
 
+// MediaRepository defines data access operations for Media.
+type MediaRepository interface {
+	Create(media *model.Media) error
+	FindByID(id uint) (*model.Media, error)
+	FindByUserID(userID uint) ([]model.Media, error)
+	Delete(id uint) error
+}
+
 // CardRepository defines data access operations for Card.
 type CardRepository interface {
 	Create(card *model.Card) error

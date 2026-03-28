@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,6 +25,7 @@ import (
 	"kpp.dev/kpfc/internal/model"
 	"kpp.dev/kpfc/internal/repository"
 	"kpp.dev/kpfc/internal/service"
+	"kpp.dev/kpfc/internal/storage"
 )
 
 // version is injected at build time via:
@@ -76,26 +79,36 @@ func main() {
 		&model.Deck{},
 		&model.Card{},
 		&model.UserDeckUpvote{},
+		&model.Media{},
 	); err != nil {
 		log.Error("failed to run migrations", "err", err)
 		os.Exit(1)
 	}
 	log.Debug("migrations applied")
 
+	if err := os.MkdirAll(cfg.MediaRoot, 0o755); err != nil {
+		log.Error("failed to create media root directory", "err", err)
+		os.Exit(1)
+	}
+
 	userRepo := repository.NewGORMUserRepository(db)
 	deckRepo := repository.NewGORMDeckRepository(db)
 	cardRepo := repository.NewGORMCardRepository(db)
+	mediaRepo := repository.NewGORMMediaRepository(db)
+	localStore := storage.NewLocalStorage(cfg.MediaRoot)
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	userSvc := service.NewUserService(userRepo)
 	deckSvc := service.NewDeckService(deckRepo)
 	cardSvc := service.NewCardService(cardRepo, deckRepo)
 	studySvc := service.NewStudyService(cardRepo, deckRepo, userRepo)
+	mediaSvc := service.NewMediaService(mediaRepo, localStore, newUUID)
 	authHandler := handler.NewAuthHandler(authSvc)
 	userHandler := handler.NewUserHandler(userSvc)
 	deckHandler := handler.NewDeckHandler(deckSvc)
 	cardHandler := handler.NewCardHandler(cardSvc)
 	studyHandler := handler.NewStudyHandler(studySvc)
 	publicHandler := handler.NewPublicHandler(deckSvc)
+	mediaHandler := handler.NewMediaHandler(mediaSvc)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
@@ -132,7 +145,12 @@ func main() {
 		r.Post("/api/v1/cards/{id}/review", studyHandler.SubmitReview)
 
 		r.Post("/api/v1/decks/{id}/upvote", deckHandler.Upvote)
+
+		r.Post("/api/v1/media", mediaHandler.Upload)
+		r.Delete("/api/v1/media/{id}", mediaHandler.Delete)
 	})
+
+	r.Get("/api/v1/media/{id}", mediaHandler.Serve)
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	srv := &http.Server{
@@ -167,6 +185,15 @@ func main() {
 	}
 
 	log.Info("server stopped")
+}
+
+// newUUID generates a random 16-byte hex string suitable for storage paths.
+func newUUID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand unavailable: " + err.Error())
+	}
+	return hex.EncodeToString(b)
 }
 
 func healthHandler(v string) http.HandlerFunc {
