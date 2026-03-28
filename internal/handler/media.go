@@ -22,8 +22,8 @@ const maxUploadBytes = 10 * 1024 * 1024 // 10 MB
 // mediaServiceIface is the subset of MediaService used by the handler.
 type mediaServiceIface interface {
 	Upload(ctx context.Context, userID uint, filename, contentType string, size int64, r io.Reader) (*model.Media, error)
-	GetByID(ctx context.Context, id uint) (*model.Media, io.ReadCloser, error)
-	Delete(ctx context.Context, userID, mediaID uint) error
+	GetByPublicID(ctx context.Context, publicID string) (*model.Media, io.ReadCloser, error)
+	Delete(ctx context.Context, userID uint, publicID string) error
 }
 
 // MediaHandler handles media upload/retrieval/deletion.
@@ -73,13 +73,9 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 // Serve handles GET /api/v1/media/{id} (no auth required).
 func (h *MediaHandler) Serve(w http.ResponseWriter, r *http.Request) {
-	id, err := parseMediaID(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid media id")
-		return
-	}
+	publicID := chi.URLParam(r, "id")
 
-	m, rc, err := h.svc.GetByID(r.Context(), id)
+	m, rc, err := h.svc.GetByPublicID(r.Context(), publicID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "media not found")
@@ -104,13 +100,9 @@ func (h *MediaHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := parseMediaID(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid media id")
-		return
-	}
+	publicID := chi.URLParam(r, "id")
 
-	if err := h.svc.Delete(r.Context(), userID, id); err != nil {
+	if err := h.svc.Delete(r.Context(), userID, publicID); err != nil {
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
 			writeError(w, http.StatusNotFound, "media not found")
@@ -130,21 +122,13 @@ func mediaResponse(m *model.Media, r *http.Request) map[string]any {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	url := fmt.Sprintf("%s://%s/api/v1/media/%d", scheme, r.Host, m.ID)
+	url := fmt.Sprintf("%s://%s/api/v1/media/%s", scheme, r.Host, m.PublicID)
 	return map[string]any{
 		"id":           m.ID,
+		"public_id":    m.PublicID,
 		"filename":     m.Filename,
 		"content_type": m.ContentType,
 		"size":         m.Size,
 		"url":          url,
 	}
-}
-
-func parseMediaID(r *http.Request) (uint, error) {
-	raw := chi.URLParam(r, "id")
-	n, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	return uint(n), nil
 }

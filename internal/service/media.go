@@ -55,6 +55,7 @@ func (s *MediaService) Upload(ctx context.Context, userID uint, filename, conten
 	}
 
 	m := &model.Media{
+		PublicID:    s.idGen(),
 		UserID:      userID,
 		Filename:    sanitizeFilename(filename),
 		ContentType: contentType,
@@ -69,10 +70,10 @@ func (s *MediaService) Upload(ctx context.Context, userID uint, filename, conten
 	return m, nil
 }
 
-// GetByID returns the Media record and an open reader for its content.
+// GetByPublicID returns the Media record and an open reader for its content.
 // The caller must close the reader.
-func (s *MediaService) GetByID(ctx context.Context, id uint) (*model.Media, io.ReadCloser, error) {
-	m, err := s.repo.FindByID(id)
+func (s *MediaService) GetByPublicID(ctx context.Context, publicID string) (*model.Media, io.ReadCloser, error) {
+	m, err := s.repo.FindByPublicID(publicID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, nil, repository.ErrNotFound
@@ -88,8 +89,8 @@ func (s *MediaService) GetByID(ctx context.Context, id uint) (*model.Media, io.R
 
 // Delete removes the media file and its DB record. Returns ErrForbidden if
 // the requesting user does not own the file.
-func (s *MediaService) Delete(ctx context.Context, userID, mediaID uint) error {
-	m, err := s.repo.FindByID(mediaID)
+func (s *MediaService) Delete(ctx context.Context, userID uint, publicID string) error {
+	m, err := s.repo.FindByPublicID(publicID)
 	if err != nil {
 		return err
 	}
@@ -99,7 +100,7 @@ func (s *MediaService) Delete(ctx context.Context, userID, mediaID uint) error {
 	if err := s.store.Delete(ctx, m.StoragePath); err != nil {
 		return fmt.Errorf("media delete storage: %w", err)
 	}
-	return s.repo.Delete(mediaID)
+	return s.repo.Delete(m.ID)
 }
 
 // sanitizeFilename strips directory components from an uploaded filename.

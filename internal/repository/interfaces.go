@@ -37,6 +37,7 @@ type DeckRepository interface {
 type MediaRepository interface {
 	Create(media *model.Media) error
 	FindByID(id uint) (*model.Media, error)
+	FindByPublicID(publicID string) (*model.Media, error)
 	FindByUserID(userID uint) ([]model.Media, error)
 	Delete(id uint) error
 }

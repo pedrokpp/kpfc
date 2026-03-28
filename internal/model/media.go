@@ -5,6 +5,7 @@ import "time"
 // Media tracks a file uploaded by a user and stored via the Storage interface.
 type Media struct {
 	ID          uint      `gorm:"primaryKey"`
+	PublicID    string    `gorm:"uniqueIndex;not null;size:32"`
 	UserID      uint      `gorm:"not null;index"`
 	Filename    string    `gorm:"not null"`
 	ContentType string    `gorm:"not null"`

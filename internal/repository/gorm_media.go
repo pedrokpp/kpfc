@@ -35,6 +35,17 @@ func (r *GORMMediaRepository) FindByID(id uint) (*model.Media, error) {
 	return &m, nil
 }
 
+func (r *GORMMediaRepository) FindByPublicID(publicID string) (*model.Media, error) {
+	var m model.Media
+	if err := r.db.Where("public_id = ?", publicID).First(&m).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("media find by public id: %w", err)
+	}
+	return &m, nil
+}
+
 func (r *GORMMediaRepository) FindByUserID(userID uint) ([]model.Media, error) {
 	var items []model.Media
 	if err := r.db.Where("user_id = ?", userID).Find(&items).Error; err != nil {

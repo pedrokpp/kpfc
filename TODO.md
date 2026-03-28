@@ -448,3 +448,47 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 - [x] Verify all repository operations work correctly with PostgreSQL (data types, index behavior, timestamp handling)
 - [x] Ensure `docker-compose.yml` can be extended with a PostgreSQL service (document this in README)
 - [x] Run full integration test suite against PostgreSQL and resolve any dialect-specific issues
+
+---
+
+## Phase 12: Media IDOR Fix + Card Title Field
+
+**Objective**: Prevent IDOR on media endpoints by replacing sequential numeric IDs with unguessable public tokens in URLs. Add an optional title field to cards for preview purposes.
+
+### Phase 12.1: Media Public Token (IDOR Fix)
+
+**Objective**: The `GET /api/v1/media/{id}` endpoint is intentionally unauthenticated (media embedded in cards), but uses sequential auto-increment IDs, allowing enumeration of all uploaded files. Replace the numeric ID in URLs with a random 32-character hex token.
+
+- [ ] Update `internal/model/media.go` — add `PublicID string` field with `gorm:"uniqueIndex;not null;size:32"` tag
+- [ ] Update `internal/repository/interfaces.go` — add `FindByPublicID(publicID string) (*model.Media, error)` to `MediaRepository`
+- [ ] Implement `FindByPublicID` in `internal/repository/gorm_media.go` — query `WHERE public_id = ?`, return `ErrNotFound` if missing
+- [ ] Update `internal/service/media.go`:
+  - `Upload()`: set `m.PublicID = s.idGen()` before calling `repo.Create()`
+  - Rename `GetByID` → `GetByPublicID(ctx, publicID string)` — use `repo.FindByPublicID` instead of `FindByID`
+  - Update `Delete(ctx, userID uint, publicID string)` — lookup via `FindByPublicID` instead of `FindByID`
+- [ ] Update `internal/handler/media.go`:
+  - `mediaServiceIface`: change `GetByID` → `GetByPublicID(ctx, publicID string)`, change `Delete` to accept `publicID string` instead of `mediaID uint`
+  - `Serve()`: read `chi.URLParam(r, "id")` as string directly (no uint parsing)
+  - `Delete()`: read URL param as string directly
+  - `mediaResponse()`: include `"public_id"` in response, build URL using `m.PublicID` instead of `m.ID`
+  - Remove `parseMediaID()` helper (no longer needed)
+- [ ] Update `internal/handler/media_test.go` — use `public_id` from upload response for Serve/Delete URL paths instead of numeric `id`
+- [ ] Run `go test ./...` — all tests must pass
+
+### Phase 12.2: Card Title Field
+
+**Objective**: Add an optional `Title` field to the Card model for preview purposes (e.g., showing a card title before revealing front/back).
+
+- [ ] Update `internal/model/card.go` — add `Title string` field (no `not null`, optional, empty string default)
+- [ ] Update `internal/service/card.go`:
+  - Add `Title string` to `CardCreateOpts`
+  - `Create()`: add `title string` parameter, set `card.Title = title`
+  - `CreateAdvanced()`: set `card.Title = opts.Title`
+  - `Update()`: add `title string` parameter, set `card.Title = title`
+  - `UpdateAdvanced()`: set `card.Title = opts.Title`
+- [ ] Update `internal/handler/card.go`:
+  - `cardResponse()`: add `"title": c.Title` to response map
+  - `Create` handler: read `title` from request JSON body, pass to service `Create()` / `CreateAdvanced()`
+  - `Update` handler: read `title` from request JSON body, pass to service `Update()` / `UpdateAdvanced()`
+- [ ] Update `API.md` — document `title` field in card create/update/response
+- [ ] Run `go test ./...` — all tests must pass

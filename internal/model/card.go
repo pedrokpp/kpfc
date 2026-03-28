@@ -5,6 +5,7 @@ import "time"
 type Card struct {
 	ID           uint      `gorm:"primaryKey"`
 	DeckID       uint      `gorm:"not null;index"`
+	Title        string
 	Front        string    `gorm:"not null"`
 	Back         string    `gorm:"not null"`
 	CardType     string    `gorm:"default:'basic';not null"`

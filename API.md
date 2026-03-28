@@ -1,17 +1,18 @@
 # KPFC API Reference
 
-**Version:** 0.1.8
+**Version:** 0.1.12
 **Base URL:** `http://localhost:8080/api/v1`
 
-KPFC is an Anki-like spaced-repetition flashcard backend. It uses JWT Bearer tokens for authentication, SQLite for storage, and the SM-2 algorithm for study scheduling.
+KPFC is an Anki-like spaced-repetition flashcard backend. It uses JWT Bearer tokens for authentication, PostgreSQL for storage, and the SM-2 algorithm for study scheduling.
 
 ## Configuration
 
 | Env Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8080` | Server listen port |
-| `DB_PATH` | `./kpfc.db` | SQLite database file path |
-| `JWT_SECRET` | (empty, auto-generated) | Secret for JWT signing |
+| `DATABASE_URL` | (required) | PostgreSQL connection string |
+| `JWT_SECRET` | (required) | Secret for JWT signing |
+| `MEDIA_ROOT` | `./media` | Local directory for uploaded media files |
 
 ---
 
@@ -46,6 +47,7 @@ All errors follow this structure:
 | POST | `/auth/register` | No | Register new user |
 | POST | `/auth/login` | No | Login and get JWT |
 | GET | `/public/decks` | No | List public decks |
+| GET | `/media/{public_id}` | No | Serve uploaded media file |
 | GET | `/users/me` | Yes | Get current user profile |
 | PUT | `/users/me` | Yes | Update current user profile |
 | GET | `/decks` | Yes | List user's decks |
@@ -61,6 +63,8 @@ All errors follow this structure:
 | DELETE | `/cards/{id}` | Yes | Delete card |
 | POST | `/decks/{id}/study` | Yes | Start study session |
 | POST | `/cards/{id}/review` | Yes | Submit card review |
+| POST | `/media` | Yes | Upload media file |
+| DELETE | `/media/{id}` | Yes | Delete media file |
 
 ---
 
@@ -72,7 +76,7 @@ Returns server health status.
 
 **Response 200:**
 ```json
-{"status": "ok", "version": "0.1.8"}
+{"status": "ok", "version": "0.1.11"}
 ```
 
 ### GET /version
@@ -81,7 +85,7 @@ Returns server version.
 
 **Response 200:**
 ```json
-{"version": "0.1.8"}
+{"version": "0.1.11"}
 ```
 
 ---
@@ -360,8 +364,12 @@ List all public decks. No authentication required.
 {
   "id": 1,
   "deck_id": 1,
+  "title": "Optional preview title",
   "front": "What is a goroutine?",
   "back": "A lightweight thread managed by the Go runtime",
+  "card_type": "basic",
+  "cloze_index": 0,
+  "extra": "",
   "interval": 1,
   "repetitions": 0,
   "ease_factor": 2.5,
@@ -370,6 +378,13 @@ List all public decks. No authentication required.
   "updated_at": "2026-03-26T10:00:00Z"
 }
 ```
+
+| Field | Description |
+|---|---|
+| `title` | Optional preview title for the card. Empty string if not set. |
+| `card_type` | `"basic"` or `"cloze"`. Default: `"basic"`. |
+| `cloze_index` | For cloze cards: which deletion number this card represents (1-based). `0` for basic cards. |
+| `extra` | Optional extra context. Used by Anki cloze imports for the "Extra" field. Empty for basic cards. |
 
 ---
 
@@ -395,7 +410,7 @@ Create a new card in a deck.
 
 **Path params:** `id` (uint) — deck ID
 
-**Request body:**
+**Request body (basic card):**
 ```json
 {
   "front": "What is a goroutine?",
@@ -403,15 +418,29 @@ Create a new card in a deck.
 }
 ```
 
-| Field | Type | Required |
-|---|---|---|
-| `front` | string | Yes |
-| `back` | string | Yes |
+**Request body (cloze card):**
+```json
+{
+  "front": "The {{c1::Go}} runtime schedules goroutines.",
+  "card_type": "cloze",
+  "cloze_index": 1,
+  "extra": "Optional extra context"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string | No | Optional preview title for the card. |
+| `front` | string | Yes | For cloze: must contain at least one `{{cN::...}}` pattern. |
+| `back` | string | Yes for basic | Ignored for cloze cards (rendered dynamically). |
+| `card_type` | string | No | `"basic"` (default) or `"cloze"`. |
+| `cloze_index` | int | Yes for cloze | Which deletion number this card represents (≥ 1). |
+| `extra` | string | No | Extra context field. Used for cloze cards. |
 
 **Response 201:** Card object.
 
 **Errors:**
-- `400` — `"invalid request body"` / `"invalid deck id"` / `"front and back are required"`
+- `400` — `"invalid request body"` / `"invalid deck id"` / `"front and back are required"` / `"front must contain at least one cloze deletion"` / `"cloze_index must be greater than 0"`
 - `401` — `"unauthorized"`
 - `403` — `"forbidden"`
 
@@ -435,7 +464,7 @@ Get a specific card. The card's deck must be owned by the authenticated user.
 
 ### PUT /cards/{id}
 
-Update a card's front and back text.
+Update a card.
 
 **Path params:** `id` (uint) — card ID
 
@@ -443,14 +472,18 @@ Update a card's front and back text.
 ```json
 {
   "front": "Updated question",
-  "back": "Updated answer"
+  "back": "Updated answer",
+  "extra": "Optional extra context"
 }
 ```
 
-| Field | Type | Required |
-|---|---|---|
-| `front` | string | Yes |
-| `back` | string | Yes |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `title` | string | No | Optional preview title. |
+| `front` | string | Yes | |
+| `back` | string | Yes | |
+| `card_type` | string | No | If omitted, preserves existing card type. |
+| `extra` | string | No | |
 
 **Response 200:** Card object.
 
@@ -516,7 +549,7 @@ Start a study session for a deck.
 
 ### POST /cards/{id}/review
 
-Submit a quality rating after reviewing a card. Updates the card's SM-2 scheduling parameters (interval, repetitions, ease_factor, next_review_at).
+Submit a quality rating after reviewing a card. Updates the card's SM-2 scheduling parameters (`interval`, `repetitions`, `ease_factor`, `next_review_at`).
 
 **Path params:** `id` (uint) — card ID
 
@@ -551,12 +584,103 @@ Submit a quality rating after reviewing a card. Updates the card's SM-2 scheduli
 
 ---
 
+## Media
+
+Uploaded media files are stored server-side and served by ID. This enables embedding images and audio in card content using standard HTML tags.
+
+### Media Object
+
+```json
+{
+  "id": 1,
+  "public_id": "a3f9e2b1c4d87e6f0123456789abcdef",
+  "filename": "diagram.png",
+  "content_type": "image/png",
+  "size": 20480,
+  "url": "http://localhost:8080/api/v1/media/a3f9e2b1c4d87e6f0123456789abcdef"
+}
+```
+
+The `public_id` is a random 32-character hex token. Media URLs use this token instead of the sequential database ID to prevent enumeration (IDOR).
+
+### Supported content types
+
+| Type | Extensions |
+|---|---|
+| `image/png` | `.png` |
+| `image/jpeg` | `.jpg`, `.jpeg` |
+| `image/gif` | `.gif` |
+| `image/webp` | `.webp` |
+| `image/svg+xml` | `.svg` |
+| `audio/mpeg` | `.mp3` |
+| `audio/mp4` | `.m4a` |
+
+Maximum file size: **10 MB**.
+
+---
+
+### POST /media
+
+Upload a media file. Requires authentication.
+
+**Request:** `multipart/form-data` with field name `file`.
+
+```
+POST /api/v1/media
+Authorization: Bearer <token>
+Content-Type: multipart/form-data; boundary=...
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="diagram.png"
+Content-Type: image/png
+
+<binary data>
+--boundary--
+```
+
+**Response 201:** Media object.
+
+**Errors:**
+- `400` — `"request too large or invalid multipart form"` / `"missing form file field 'file'"` / `"unsupported content type: ..."` / `"file too large: ..."`
+- `401` — `"unauthorized"`
+
+---
+
+### GET /media/{id}
+
+Serve a media file directly. No authentication required. Suitable for use in `<img src="...">` or `<audio src="...">` tags.
+
+**Path params:** `id` (string) — media `public_id` token (from the media object returned by upload)
+
+**Response 200:** Raw file bytes with appropriate `Content-Type` and `Cache-Control: public, max-age=31536000, immutable` headers.
+
+**Errors:**
+- `404` — `"media not found"`
+
+---
+
+### DELETE /media/{id}
+
+Delete a media file. Requires authentication. Only the owning user may delete their own files.
+
+**Path params:** `id` (string) — media `public_id` token
+
+**Response:** `204 No Content` (empty body)
+
+**Errors:**
+- `401` — `"unauthorized"`
+- `403` — `"forbidden"`
+- `404` — `"media not found"`
+
+---
+
 ## Typical Frontend Flow
 
 1. **Register** or **Login** to get a JWT token.
-2. **Create decks** and **add cards** to them.
-3. **Start a study session** (spaced or random mode).
-4. For each card returned, display the front, let the user reveal the back, then **submit a review** with a quality rating.
-5. The backend updates the card's scheduling — the next time a spaced session is started, only due cards appear.
-6. **User profile** shows login streak and total points for gamification.
-7. Decks can be made **public** and browsed/upvoted by other users.
+2. **Create decks** and **add cards** to them. Cards may be `basic` (front/back) or `cloze` (fill-in-the-blank with `{{cN::answer}}` syntax).
+3. Optionally **upload media** (images, audio) and embed the returned URLs in card `front`/`back` content.
+4. **Start a study session** (spaced or random mode).
+5. For each card returned, display the front, let the user reveal the back, then **submit a review** with a quality rating.
+6. The backend updates the card's scheduling — the next time a spaced session is started, only due cards appear.
+7. **User profile** shows login streak and total points for gamification.
+8. Decks can be made **public** and browsed/upvoted by other users.

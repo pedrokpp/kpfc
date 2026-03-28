@@ -26,6 +26,7 @@ func cardResponse(c *model.Card) map[string]any {
 	return map[string]any{
 		"id":             c.ID,
 		"deck_id":        c.DeckID,
+		"title":          c.Title,
 		"front":          c.Front,
 		"back":           c.Back,
 		"card_type":      c.CardType,
@@ -103,6 +104,7 @@ func (h *CardHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		Title      string `json:"title"`
 		Front      string `json:"front"`
 		Back       string `json:"back"`
 		CardType   string `json:"card_type"`
@@ -126,9 +128,10 @@ func (h *CardHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "front and back are required")
 			return
 		}
-		card, err = h.cards.Create(userID, deckID, req.Front, req.Back)
+		card, err = h.cards.Create(userID, deckID, req.Front, req.Back, req.Title)
 	} else {
 		card, err = h.cards.CreateAdvanced(userID, deckID, service.CardCreateOpts{
+			Title:      req.Title,
 			Front:      req.Front,
 			Back:       req.Back,
 			CardType:   req.CardType,
@@ -186,6 +189,7 @@ func (h *CardHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		Title      string `json:"title"`
 		Front      string `json:"front"`
 		Back       string `json:"back"`
 		CardType   string `json:"card_type"`
@@ -209,9 +213,10 @@ func (h *CardHandler) Update(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "front and back are required")
 			return
 		}
-		card, err = h.cards.Update(userID, cardID, req.Front, req.Back)
+		card, err = h.cards.Update(userID, cardID, req.Front, req.Back, req.Title)
 	} else {
 		card, err = h.cards.UpdateAdvanced(userID, cardID, service.CardCreateOpts{
+			Title:      req.Title,
 			Front:      req.Front,
 			Back:       req.Back,
 			CardType:   req.CardType,

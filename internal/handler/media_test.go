@@ -128,6 +128,9 @@ func TestMedia_UploadAndServe(t *testing.T) {
 	if resp["id"] == nil {
 		t.Fatal("upload response missing id")
 	}
+	if resp["public_id"] == nil {
+		t.Fatal("upload response missing public_id")
+	}
 	if resp["url"] == nil {
 		t.Fatal("upload response missing url")
 	}
@@ -136,9 +139,9 @@ func TestMedia_UploadAndServe(t *testing.T) {
 	}
 
 	// Serve the file (no auth)
-	id := int(resp["id"].(float64))
+	publicID := resp["public_id"].(string)
 	rec2 := httptest.NewRecorder()
-	r.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%d", id), nil))
+	r.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s", publicID), nil))
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("serve: got %d", rec2.Code)
 	}
@@ -201,10 +204,10 @@ func TestMedia_Delete(t *testing.T) {
 	}
 	var resp map[string]any
 	json.NewDecoder(rec.Body).Decode(&resp)
-	id := int(resp["id"].(float64))
+	publicID := resp["public_id"].(string)
 
 	// delete
-	req2 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/media/%d", id), nil)
+	req2 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/media/%s", publicID), nil)
 	req2.Header.Set("Authorization", "Bearer "+token)
 	rec2 := httptest.NewRecorder()
 	r.ServeHTTP(rec2, req2)
@@ -214,7 +217,7 @@ func TestMedia_Delete(t *testing.T) {
 
 	// serve after delete should 404 (storage gone) or 500 (record gone)
 	rec3 := httptest.NewRecorder()
-	r.ServeHTTP(rec3, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%d", id), nil))
+	r.ServeHTTP(rec3, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s", publicID), nil))
 	if rec3.Code == http.StatusOK {
 		t.Fatal("file should not be accessible after delete")
 	}
@@ -234,10 +237,10 @@ func TestMedia_Delete_Forbidden(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	var resp map[string]any
 	json.NewDecoder(rec.Body).Decode(&resp)
-	id := int(resp["id"].(float64))
+	publicID := resp["public_id"].(string)
 
 	// user2 tries to delete
-	req2 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/media/%d", id), nil)
+	req2 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/media/%s", publicID), nil)
 	req2.Header.Set("Authorization", "Bearer "+token2)
 	rec2 := httptest.NewRecorder()
 	r.ServeHTTP(rec2, req2)

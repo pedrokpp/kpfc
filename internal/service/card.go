@@ -16,6 +16,7 @@ var (
 
 // CardCreateOpts holds parameters for CreateAdvanced and UpdateAdvanced.
 type CardCreateOpts struct {
+	Title      string
 	Front      string
 	Back       string
 	CardType   string
@@ -74,12 +75,13 @@ func (s *CardService) ownerCard(userID, cardID uint) (*model.Card, error) {
 }
 
 // Create adds a new card to deckID. Returns ErrForbidden if userID doesn't own the deck.
-func (s *CardService) Create(userID, deckID uint, front, back string) (*model.Card, error) {
+func (s *CardService) Create(userID, deckID uint, front, back, title string) (*model.Card, error) {
 	if _, err := s.ownerDeck(userID, deckID); err != nil {
 		return nil, err
 	}
 	card := &model.Card{
 		DeckID:     deckID,
+		Title:      title,
 		Front:      front,
 		Back:       back,
 		EaseFactor: 2.5,
@@ -104,12 +106,13 @@ func (s *CardService) ListByDeck(userID, deckID uint) ([]model.Card, error) {
 	return s.cards.FindByDeckID(deckID)
 }
 
-// Update changes front/back of a card. Returns ErrForbidden if userID doesn't own the card's deck.
-func (s *CardService) Update(userID, cardID uint, front, back string) (*model.Card, error) {
+// Update changes front/back/title of a card. Returns ErrForbidden if userID doesn't own the card's deck.
+func (s *CardService) Update(userID, cardID uint, front, back, title string) (*model.Card, error) {
 	card, err := s.ownerCard(userID, cardID)
 	if err != nil {
 		return nil, err
 	}
+	card.Title = title
 	card.Front = front
 	card.Back = back
 	if err := s.cards.Update(card); err != nil {
@@ -138,6 +141,7 @@ func (s *CardService) CreateAdvanced(userID, deckID uint, opts CardCreateOpts) (
 	}
 	card := &model.Card{
 		DeckID:     deckID,
+		Title:      opts.Title,
 		Front:      opts.Front,
 		Back:       opts.Back,
 		CardType:   opts.CardType,
@@ -163,6 +167,7 @@ func (s *CardService) UpdateAdvanced(userID, cardID uint, opts CardCreateOpts) (
 	if err := validateCardOpts(opts); err != nil {
 		return nil, err
 	}
+	card.Title = opts.Title
 	card.Front = opts.Front
 	card.Back = opts.Back
 	card.CardType = opts.CardType
