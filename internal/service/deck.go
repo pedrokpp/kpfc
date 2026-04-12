@@ -101,12 +101,5 @@ func (s *DeckService) ToggleUpvote(userID, deckID uint) error {
 		return ErrForbidden
 	}
 
-	has, err := s.decks.HasUpvoted(userID, deckID)
-	if err != nil {
-		return err
-	}
-	if has {
-		return s.decks.RemoveUpvote(userID, deckID)
-	}
-	return s.decks.AddUpvote(userID, deckID)
+	return s.decks.ToggleUpvote(userID, deckID)
 }

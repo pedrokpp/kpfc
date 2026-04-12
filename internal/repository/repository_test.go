@@ -191,25 +191,16 @@ func TestDeckRepository_Upvote_Toggle(t *testing.T) {
 	deck := &model.Deck{UserID: user.ID, Title: "D", IsPublic: true}
 	deckRepo.Create(deck)
 
-	has, _ := deckRepo.HasUpvoted(user.ID, deck.ID)
-	if has {
-		t.Fatal("expected no upvote initially")
-	}
-
-	if err := deckRepo.AddUpvote(user.ID, deck.ID); err != nil {
-		t.Fatalf("AddUpvote: %v", err)
-	}
-	has, _ = deckRepo.HasUpvoted(user.ID, deck.ID)
-	if !has {
-		t.Fatal("expected upvote after AddUpvote")
+	if err := deckRepo.ToggleUpvote(user.ID, deck.ID); err != nil {
+		t.Fatalf("ToggleUpvote (add): %v", err)
 	}
 	got, _ := deckRepo.FindByID(deck.ID)
 	if got.UpvoteCount != 1 {
 		t.Errorf("UpvoteCount after add: got %d, want 1", got.UpvoteCount)
 	}
 
-	if err := deckRepo.RemoveUpvote(user.ID, deck.ID); err != nil {
-		t.Fatalf("RemoveUpvote: %v", err)
+	if err := deckRepo.ToggleUpvote(user.ID, deck.ID); err != nil {
+		t.Fatalf("ToggleUpvote (remove): %v", err)
 	}
 	got, _ = deckRepo.FindByID(deck.ID)
 	if got.UpvoteCount != 0 {

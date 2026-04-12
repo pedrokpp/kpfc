@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"kpp.dev/kpfc/internal/model"
 )
@@ -71,41 +72,33 @@ func (r *GORMDeckRepository) Delete(id uint) error {
 	return nil
 }
 
-func (r *GORMDeckRepository) HasUpvoted(userID, deckID uint) (bool, error) {
-	var count int64
-	err := r.db.Model(&model.UserDeckUpvote{}).
-		Where("user_id = ? AND deck_id = ?", userID, deckID).
-		Count(&count).Error
-	if err != nil {
-		return false, fmt.Errorf("deck has upvoted: %w", err)
-	}
-	return count > 0, nil
-}
-
-func (r *GORMDeckRepository) AddUpvote(userID, deckID uint) error {
+func (r *GORMDeckRepository) ToggleUpvote(userID, deckID uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		upvote := model.UserDeckUpvote{UserID: userID, DeckID: deckID}
-		if err := tx.Create(&upvote).Error; err != nil {
-			return fmt.Errorf("deck add upvote: %w", err)
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&model.Deck{}, deckID).Error; err != nil {
+			return fmt.Errorf("deck toggle upvote lock: %w", err)
 		}
-		if err := tx.Model(&model.Deck{}).Where("id = ?", deckID).
-			UpdateColumn("upvote_count", gorm.Expr("upvote_count + 1")).Error; err != nil {
-			return fmt.Errorf("deck increment upvote count: %w", err)
-		}
-		return nil
-	})
-}
 
-func (r *GORMDeckRepository) RemoveUpvote(userID, deckID uint) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ? AND deck_id = ?", userID, deckID).
-			Delete(&model.UserDeckUpvote{}).Error; err != nil {
-			return fmt.Errorf("deck remove upvote: %w", err)
+		var count int64
+		if err := tx.Model(&model.UserDeckUpvote{}).
+			Where("user_id = ? AND deck_id = ?", userID, deckID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("deck toggle upvote check: %w", err)
 		}
-		if err := tx.Model(&model.Deck{}).Where("id = ?", deckID).
-			UpdateColumn("upvote_count", gorm.Expr("upvote_count - 1")).Error; err != nil {
-			return fmt.Errorf("deck decrement upvote count: %w", err)
+
+		if count > 0 {
+			if err := tx.Where("user_id = ? AND deck_id = ?", userID, deckID).
+				Delete(&model.UserDeckUpvote{}).Error; err != nil {
+				return fmt.Errorf("deck toggle remove upvote: %w", err)
+			}
+			return tx.Model(&model.Deck{}).Where("id = ?", deckID).
+				UpdateColumn("upvote_count", gorm.Expr("upvote_count - 1")).Error
 		}
-		return nil
+
+		if err := tx.Create(&model.UserDeckUpvote{UserID: userID, DeckID: deckID}).Error; err != nil {
+			return fmt.Errorf("deck toggle add upvote: %w", err)
+		}
+		return tx.Model(&model.Deck{}).Where("id = ?", deckID).
+			UpdateColumn("upvote_count", gorm.Expr("upvote_count + 1")).Error
 	})
 }

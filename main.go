@@ -31,7 +31,7 @@ import (
 // version is injected at build time via:
 //
 //	go build -ldflags "-X main.version=$(cat VERSION)" -o kpfc .
-var version string
+var version string = "local"
 
 func main() {
 	debug := flag.Bool("debug", false, "enable debug-level log output")

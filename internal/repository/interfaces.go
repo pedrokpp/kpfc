@@ -25,12 +25,8 @@ type DeckRepository interface {
 	FindPublic(sortBy string) ([]model.Deck, error)
 	Update(deck *model.Deck) error
 	Delete(id uint) error
-	// HasUpvoted reports whether userID has upvoted deckID.
-	HasUpvoted(userID, deckID uint) (bool, error)
-	// AddUpvote records an upvote and increments UpvoteCount atomically.
-	AddUpvote(userID, deckID uint) error
-	// RemoveUpvote removes an upvote and decrements UpvoteCount atomically.
-	RemoveUpvote(userID, deckID uint) error
+	// ToggleUpvote atomically adds or removes an upvote and keeps UpvoteCount in sync.
+	ToggleUpvote(userID, deckID uint) error
 }
 
 // MediaRepository defines data access operations for Media.
