@@ -1,4 +1,4 @@
-# KPFC — Flashcards Backend
+# kpfc — Flashcards Backend
 
 An [Anki](https://apps.ankiweb.net)-inspired spaced repetition flashcards backend built with [Go](https://go.dev). Licensed under the [MIT License](LICENSE).
 
@@ -6,7 +6,7 @@ An [Anki](https://apps.ankiweb.net)-inspired spaced repetition flashcards backen
 
 ## Overview
 
-KPFC is a REST API backend for a flashcard study platform. Its core premise is that the platform acts as a **helper tool**, not a prescriber of behavior. Users are in control — they can follow the spaced repetition schedule, review a deck again freely, or practice in random mode. The system always tracks the underlying SM-2 state regardless of how the user chooses to study.
+kpfc is a REST API backend for a flashcard study platform. Its core premise is that the platform acts as a **helper tool**, not a prescriber of behavior. Users are in control — they can follow the spaced repetition schedule, review a deck again freely, or practice in random mode. The system always tracks the underlying SM-2 state regardless of how the user chooses to study.
 
 Key characteristics:
 
@@ -231,7 +231,7 @@ The import process:
 5. Map each note to a Card: `Front = fields[0]`, `Back = fields[1]`
 6. Create a new Deck for the user and insert all Cards
 
-This enables a frictionless migration path from Anki to KPFC.
+This enables a frictionless migration path from Anki to kpfc.
 
 ---
 
