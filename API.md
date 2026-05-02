@@ -473,6 +473,7 @@ Update a card.
 {
   "front": "Updated question",
   "back": "Updated answer",
+  "card_type": "basic",
   "extra": "Optional extra context"
 }
 ```
@@ -480,15 +481,23 @@ Update a card.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `title` | string | No | Optional preview title. |
-| `front` | string | Yes | |
-| `back` | string | Yes | |
-| `card_type` | string | No | If omitted, preserves existing card type. |
-| `extra` | string | No | |
+| `front` | string | Yes | Always required. For cloze cards it must contain at least one `{{cN::...}}` deletion. |
+| `back` | string | Conditionally | Required only when the effective final type is `basic`. Ignored and persisted as `""` for `cloze`. |
+| `card_type` | string | No | `"basic"` or `"cloze"`. If omitted, preserves the current card type. |
+| `cloze_index` | int | Conditionally | Required when the effective final type is `cloze` and not already present on the current cloze card. Ignored and persisted as `0` for `basic`. |
+| `extra` | string | No | Persisted only for `cloze`. For `basic`, it is discarded and stored as `""`. |
 
 **Response 200:** Card object.
 
+Type changes are normalized destructively:
+
+- `basic -> cloze` clears `back`
+- `cloze -> basic` clears `cloze_index` and `extra`
+- `basic` cards always persist `cloze_index = 0` and `extra = ""`
+- `cloze` cards always persist `back = ""`
+
 **Errors:**
-- `400` — `"invalid request body"` / `"invalid card id"` / `"front and back are required"`
+- `400` — `"invalid request body"` / `"invalid card id"` / `"front and back are required"` / cloze validation errors
 - `401` — `"unauthorized"`
 - `403` — `"forbidden"`
 - `404` — `"card not found"`

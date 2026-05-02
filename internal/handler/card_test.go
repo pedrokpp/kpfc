@@ -118,6 +118,9 @@ func TestCreateCard_Success(t *testing.T) {
 	if resp["front"] != "What is a goroutine?" {
 		t.Errorf("front = %v", resp["front"])
 	}
+	if resp["card_type"] != "basic" {
+		t.Errorf("card_type = %v, want 'basic'", resp["card_type"])
+	}
 	if resp["deck_id"] == nil {
 		t.Error("expected deck_id in response")
 	}
@@ -315,6 +318,172 @@ func TestUpdateCard_MissingFields(t *testing.T) {
 	}, token)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestUpdateCard_OmittedCardType_PreservesBasic(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "basic-preserve@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+	cardID := createCard(t, r, token, deckID, "Q", "A")
+
+	w := putJSONWithToken(r, fmt.Sprintf("/api/v1/cards/%.0f", cardID), map[string]any{
+		"front": "Updated Q",
+		"back":  "Updated A",
+	}, token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body)
+	}
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["card_type"] != "basic" {
+		t.Fatalf("card_type = %v, want 'basic'", resp["card_type"])
+	}
+}
+
+func TestUpdateCard_OmittedCardType_PreservesCloze(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "cloze-preserve@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+
+	w := postJSONWithToken(r, fmt.Sprintf("/api/v1/decks/%.0f/cards", deckID), map[string]any{
+		"front":       "{{c1::Paris}} is the capital of France",
+		"card_type":   "cloze",
+		"cloze_index": 1,
+		"extra":       "geo",
+	}, token)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create cloze: status = %d; body: %s", w.Code, w.Body)
+	}
+	var created map[string]any
+	json.NewDecoder(w.Body).Decode(&created)
+
+	cardID := created["id"].(float64)
+	w = putJSONWithToken(r, fmt.Sprintf("/api/v1/cards/%.0f", cardID), map[string]any{
+		"front": "The capital is {{c1::Paris}}",
+	}, token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body)
+	}
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["card_type"] != "cloze" {
+		t.Fatalf("card_type = %v, want 'cloze'", resp["card_type"])
+	}
+	if resp["cloze_index"] != float64(1) {
+		t.Fatalf("cloze_index = %v, want 1", resp["cloze_index"])
+	}
+	if resp["back"] != "" {
+		t.Fatalf("back = %v, want empty", resp["back"])
+	}
+	if resp["extra"] != "geo" {
+		t.Fatalf("extra = %v, want 'geo'", resp["extra"])
+	}
+}
+
+func TestUpdateCard_BasicToCloze_Success(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "basic-to-cloze@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+	cardID := createCard(t, r, token, deckID, "Q", "A")
+
+	w := putJSONWithToken(r, fmt.Sprintf("/api/v1/cards/%.0f", cardID), map[string]any{
+		"front":       "{{c1::Paris}} is the capital of France",
+		"card_type":   "cloze",
+		"cloze_index": 1,
+		"extra":       "geo",
+	}, token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body)
+	}
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["card_type"] != "cloze" {
+		t.Fatalf("card_type = %v, want 'cloze'", resp["card_type"])
+	}
+	if resp["back"] != "" {
+		t.Fatalf("back = %v, want empty", resp["back"])
+	}
+}
+
+func TestUpdateCard_ClozeToBasic_Success(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "cloze-to-basic@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+
+	w := postJSONWithToken(r, fmt.Sprintf("/api/v1/decks/%.0f/cards", deckID), map[string]any{
+		"front":       "{{c1::Paris}} is the capital of France",
+		"card_type":   "cloze",
+		"cloze_index": 1,
+		"extra":       "geo",
+	}, token)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create cloze: status = %d; body: %s", w.Code, w.Body)
+	}
+	var created map[string]any
+	json.NewDecoder(w.Body).Decode(&created)
+
+	cardID := created["id"].(float64)
+	w = putJSONWithToken(r, fmt.Sprintf("/api/v1/cards/%.0f", cardID), map[string]any{
+		"front":     "Question",
+		"back":      "Answer",
+		"card_type": "basic",
+	}, token)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body)
+	}
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["card_type"] != "basic" {
+		t.Fatalf("card_type = %v, want 'basic'", resp["card_type"])
+	}
+	if resp["cloze_index"] != float64(0) {
+		t.Fatalf("cloze_index = %v, want 0", resp["cloze_index"])
+	}
+	if resp["extra"] != "" {
+		t.Fatalf("extra = %v, want empty", resp["extra"])
+	}
+}
+
+func TestUpdateCard_BasicToCloze_InvalidIndex(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "basic-to-cloze-invalid@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+	cardID := createCard(t, r, token, deckID, "Q", "A")
+
+	w := putJSONWithToken(r, fmt.Sprintf("/api/v1/cards/%.0f", cardID), map[string]any{
+		"front":       "{{c1::Paris}} is the capital of France",
+		"card_type":   "cloze",
+		"cloze_index": 2,
+	}, token)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body)
+	}
+}
+
+func TestUpdateCard_ClozeToBasic_MissingBack(t *testing.T) {
+	r, _ := setupCardTestRouter(t)
+	token := registerAndLoginCard(t, r, "cloze-to-basic-missing-back@example.com", "pass")
+	deckID := createDeckCard(t, r, token, "Deck")
+
+	w := postJSONWithToken(r, fmt.Sprintf("/api/v1/decks/%.0f/cards", deckID), map[string]any{
+		"front":       "{{c1::Paris}} is the capital of France",
+		"card_type":   "cloze",
+		"cloze_index": 1,
+	}, token)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create cloze: status = %d; body: %s", w.Code, w.Body)
+	}
+	var created map[string]any
+	json.NewDecoder(w.Body).Decode(&created)
+
+	cardID := created["id"].(float64)
+	w = putJSONWithToken(r, fmt.Sprintf("/api/v1/cards/%.0f", cardID), map[string]any{
+		"front":     "Question",
+		"card_type": "basic",
+	}, token)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body)
 	}
 }
 

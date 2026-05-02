@@ -62,6 +62,12 @@ func cardError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusInternalServerError, "internal error")
 }
 
+func cardAuthoringBadRequest(err error) bool {
+	return errors.Is(err, service.ErrInvalidBasicCard) ||
+		errors.Is(err, service.ErrInvalidCloze) ||
+		errors.Is(err, service.ErrInvalidCardType)
+}
+
 // ListByDeck handles GET /api/v1/decks/{id}/cards
 func (h *CardHandler) ListByDeck(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())
@@ -104,44 +110,29 @@ func (h *CardHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Title      string `json:"title"`
-		Front      string `json:"front"`
-		Back       string `json:"back"`
-		CardType   string `json:"card_type"`
-		ClozeIndex int    `json:"cloze_index"`
-		Extra      string `json:"extra"`
+		Title      *string `json:"title"`
+		Front      *string `json:"front"`
+		Back       *string `json:"back"`
+		CardType   *string `json:"card_type"`
+		ClozeIndex *int    `json:"cloze_index"`
+		Extra      *string `json:"extra"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	if req.CardType == "" {
-		req.CardType = "basic"
-	}
-
-	var card *model.Card
-	var err error
-
-	if req.CardType == "basic" {
-		if req.Front == "" || req.Back == "" {
-			writeError(w, http.StatusBadRequest, "front and back are required")
-			return
-		}
-		card, err = h.cards.Create(userID, deckID, req.Front, req.Back, req.Title)
-	} else {
-		card, err = h.cards.CreateAdvanced(userID, deckID, service.CardCreateOpts{
-			Title:      req.Title,
-			Front:      req.Front,
-			Back:       req.Back,
-			CardType:   req.CardType,
-			ClozeIndex: req.ClozeIndex,
-			Extra:      req.Extra,
-		})
-		if errors.Is(err, service.ErrInvalidCloze) || errors.Is(err, service.ErrInvalidCardType) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
+	card, err := h.cards.CreateAuthored(userID, deckID, service.CardAuthoringInput{
+		Title:      req.Title,
+		Front:      req.Front,
+		Back:       req.Back,
+		CardType:   req.CardType,
+		ClozeIndex: req.ClozeIndex,
+		Extra:      req.Extra,
+	})
+	if cardAuthoringBadRequest(err) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	if err != nil {
 		cardError(w, err)
@@ -189,44 +180,29 @@ func (h *CardHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Title      string `json:"title"`
-		Front      string `json:"front"`
-		Back       string `json:"back"`
-		CardType   string `json:"card_type"`
-		ClozeIndex int    `json:"cloze_index"`
-		Extra      string `json:"extra"`
+		Title      *string `json:"title"`
+		Front      *string `json:"front"`
+		Back       *string `json:"back"`
+		CardType   *string `json:"card_type"`
+		ClozeIndex *int    `json:"cloze_index"`
+		Extra      *string `json:"extra"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	if req.CardType == "" {
-		req.CardType = "basic"
-	}
-
-	var card *model.Card
-	var err error
-
-	if req.CardType == "basic" {
-		if req.Front == "" || req.Back == "" {
-			writeError(w, http.StatusBadRequest, "front and back are required")
-			return
-		}
-		card, err = h.cards.Update(userID, cardID, req.Front, req.Back, req.Title)
-	} else {
-		card, err = h.cards.UpdateAdvanced(userID, cardID, service.CardCreateOpts{
-			Title:      req.Title,
-			Front:      req.Front,
-			Back:       req.Back,
-			CardType:   req.CardType,
-			ClozeIndex: req.ClozeIndex,
-			Extra:      req.Extra,
-		})
-		if errors.Is(err, service.ErrInvalidCloze) || errors.Is(err, service.ErrInvalidCardType) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
+	card, err := h.cards.UpdateAuthored(userID, cardID, service.CardAuthoringInput{
+		Title:      req.Title,
+		Front:      req.Front,
+		Back:       req.Back,
+		CardType:   req.CardType,
+		ClozeIndex: req.ClozeIndex,
+		Extra:      req.Extra,
+	})
+	if cardAuthoringBadRequest(err) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	if err != nil {
 		cardError(w, err)
