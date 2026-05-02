@@ -37,12 +37,13 @@ func setupMediaTestRouter(t *testing.T) (*chi.Mux, *service.AuthService) {
 
 	userRepo := repository.NewGORMUserRepository(db)
 	mediaRepo := repository.NewGORMMediaRepository(db)
+	accessSvc := service.NewAccessService(nil, nil, mediaRepo)
 	authSvc := service.NewAuthService(userRepo, "test-secret")
 
 	store := storage.NewLocalStorage(t.TempDir())
 	n := 0
 	idGen := func() string { n++; return fmt.Sprintf("file%d", n) }
-	mediaSvc := service.NewMediaService(mediaRepo, store, idGen)
+	mediaSvc := service.NewMediaService(mediaRepo, store, idGen, accessSvc)
 
 	authHandler := handler.NewAuthHandler(authSvc)
 	mediaHandler := handler.NewMediaHandler(mediaSvc)

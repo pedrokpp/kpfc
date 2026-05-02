@@ -15,27 +15,28 @@ import (
 
 // allowedContentTypes lists the MIME types accepted for media uploads.
 var allowedContentTypes = map[string]string{
-	"image/png":      "png",
-	"image/jpeg":     "jpg",
-	"image/gif":      "gif",
-	"image/webp":     "webp",
-	"image/svg+xml":  "svg",
-	"audio/mpeg":     "mp3",
-	"audio/mp4":      "m4a",
+	"image/png":     "png",
+	"image/jpeg":    "jpg",
+	"image/gif":     "gif",
+	"image/webp":    "webp",
+	"image/svg+xml": "svg",
+	"audio/mpeg":    "mp3",
+	"audio/mp4":     "m4a",
 }
 
 const maxMediaSize = 10 * 1024 * 1024 // 10 MB
 
 // MediaService handles upload, retrieval, and deletion of media files.
 type MediaService struct {
-	repo    repository.MediaRepository
-	store   storage.Storage
-	idGen   func() string
+	repo   repository.MediaRepository
+	store  storage.Storage
+	idGen  func() string
+	access *AccessService
 }
 
 // NewMediaService wires up the media service with the given repository and storage backend.
-func NewMediaService(repo repository.MediaRepository, store storage.Storage, idGen func() string) *MediaService {
-	return &MediaService{repo: repo, store: store, idGen: idGen}
+func NewMediaService(repo repository.MediaRepository, store storage.Storage, idGen func() string, access *AccessService) *MediaService {
+	return &MediaService{repo: repo, store: store, idGen: idGen, access: access}
 }
 
 // Upload validates, stores, and records a media file. Returns the created Media record.
@@ -90,12 +91,9 @@ func (s *MediaService) GetByPublicID(ctx context.Context, publicID string) (*mod
 // Delete removes the media file and its DB record. Returns ErrForbidden if
 // the requesting user does not own the file.
 func (s *MediaService) Delete(ctx context.Context, userID uint, publicID string) error {
-	m, err := s.repo.FindByPublicID(publicID)
+	m, err := s.access.DeletableMedia(userID, publicID)
 	if err != nil {
 		return err
-	}
-	if m.UserID != userID {
-		return ErrForbidden
 	}
 	if err := s.store.Delete(ctx, m.StoragePath); err != nil {
 		return fmt.Errorf("media delete storage: %w", err)

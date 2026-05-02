@@ -35,8 +35,9 @@ func setupDeckTestRouter(t *testing.T) (*chi.Mux, *service.AuthService) {
 
 	userRepo := repository.NewGORMUserRepository(db)
 	deckRepo := repository.NewGORMDeckRepository(db)
+	accessSvc := service.NewAccessService(deckRepo, nil, nil)
 	authSvc := service.NewAuthService(userRepo, "test-secret")
-	deckSvc := service.NewDeckService(deckRepo)
+	deckSvc := service.NewDeckService(deckRepo, accessSvc)
 	authHandler := handler.NewAuthHandler(authSvc)
 	deckHandler := handler.NewDeckHandler(deckSvc)
 
@@ -85,7 +86,7 @@ func registerAndLoginDeck(t *testing.T, r *chi.Mux, email, password string) stri
 func createDeck(t *testing.T, r *chi.Mux, token, title string) float64 {
 	t.Helper()
 	w := postJSONWithToken(r, "/api/v1/decks", map[string]any{
-		"title":    title,
+		"title":     title,
 		"is_public": false,
 	}, token)
 	if w.Code != http.StatusCreated {

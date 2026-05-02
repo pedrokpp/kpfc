@@ -15,17 +15,17 @@ var ErrInvalidQuality = errors.New("quality must be between 0 and 5")
 
 // StudyService manages study sessions and SM-2 review submissions.
 type StudyService struct {
-	cards repository.CardRepository
-	decks repository.DeckRepository
-	users repository.UserRepository
+	cards  repository.CardRepository
+	users  repository.UserRepository
+	access *AccessService
 }
 
 func NewStudyService(
 	cards repository.CardRepository,
-	decks repository.DeckRepository,
 	users repository.UserRepository,
+	access *AccessService,
 ) *StudyService {
-	return &StudyService{cards: cards, decks: decks, users: users}
+	return &StudyService{cards: cards, users: users, access: access}
 }
 
 // StartSession returns the cards to review for the given mode.
@@ -35,15 +35,12 @@ func NewStudyService(
 //
 // Returns ErrForbidden if userID does not own deckID.
 func (s *StudyService) StartSession(userID, deckID uint, mode string) ([]model.Card, error) {
-	deck, err := s.decks.FindByID(deckID)
-	if err != nil {
+	if _, err := s.access.StudyableDeck(userID, deckID); err != nil {
 		return nil, err
-	}
-	if deck.UserID != userID {
-		return nil, ErrForbidden
 	}
 
 	var cards []model.Card
+	var err error
 	switch mode {
 	case "spaced":
 		cards, err = s.cards.FindDueCards(deckID, time.Now())
@@ -71,16 +68,9 @@ func (s *StudyService) SubmitReview(userID, cardID uint, quality int) (*model.Ca
 		return nil, ErrInvalidQuality
 	}
 
-	card, err := s.cards.FindByID(cardID)
+	card, err := s.access.ReviewableCard(userID, cardID)
 	if err != nil {
 		return nil, err
-	}
-	deck, err := s.decks.FindByID(card.DeckID)
-	if err != nil {
-		return nil, err
-	}
-	if deck.UserID != userID {
-		return nil, ErrForbidden
 	}
 
 	result := sm2.Calculate(quality, card.Repetitions, card.EaseFactor, card.Interval, time.Now())

@@ -34,8 +34,9 @@ func setupPublicTestRouter(t *testing.T) *chi.Mux {
 
 	userRepo := repository.NewGORMUserRepository(db)
 	deckRepo := repository.NewGORMDeckRepository(db)
+	accessSvc := service.NewAccessService(deckRepo, nil, nil)
 	authSvc := service.NewAuthService(userRepo, "test-secret")
-	deckSvc := service.NewDeckService(deckRepo)
+	deckSvc := service.NewDeckService(deckRepo, accessSvc)
 	authHandler := handler.NewAuthHandler(authSvc)
 	deckHandler := handler.NewDeckHandler(deckSvc)
 	publicHandler := handler.NewPublicHandler(deckSvc)

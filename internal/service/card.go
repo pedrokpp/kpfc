@@ -42,41 +42,17 @@ func validateCardOpts(opts CardCreateOpts) error {
 
 // CardService handles card management operations.
 type CardService struct {
-	cards repository.CardRepository
-	decks repository.DeckRepository
+	cards  repository.CardRepository
+	access *AccessService
 }
 
-func NewCardService(cards repository.CardRepository, decks repository.DeckRepository) *CardService {
-	return &CardService{cards: cards, decks: decks}
-}
-
-// ownerDeck fetches deck deckID and returns ErrForbidden if it doesn't belong to userID.
-func (s *CardService) ownerDeck(userID, deckID uint) (*model.Deck, error) {
-	deck, err := s.decks.FindByID(deckID)
-	if err != nil {
-		return nil, err
-	}
-	if deck.UserID != userID {
-		return nil, ErrForbidden
-	}
-	return deck, nil
-}
-
-// ownerCard fetches card cardID and returns ErrForbidden if its deck doesn't belong to userID.
-func (s *CardService) ownerCard(userID, cardID uint) (*model.Card, error) {
-	card, err := s.cards.FindByID(cardID)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.ownerDeck(userID, card.DeckID); err != nil {
-		return nil, err
-	}
-	return card, nil
+func NewCardService(cards repository.CardRepository, access *AccessService) *CardService {
+	return &CardService{cards: cards, access: access}
 }
 
 // Create adds a new card to deckID. Returns ErrForbidden if userID doesn't own the deck.
 func (s *CardService) Create(userID, deckID uint, front, back, title string) (*model.Card, error) {
-	if _, err := s.ownerDeck(userID, deckID); err != nil {
+	if _, err := s.access.EditableDeck(userID, deckID); err != nil {
 		return nil, err
 	}
 	card := &model.Card{
@@ -95,12 +71,12 @@ func (s *CardService) Create(userID, deckID uint, front, back, title string) (*m
 
 // GetByID returns the card. Returns ErrForbidden if the card's deck doesn't belong to userID.
 func (s *CardService) GetByID(userID, cardID uint) (*model.Card, error) {
-	return s.ownerCard(userID, cardID)
+	return s.access.ReadableCard(userID, cardID)
 }
 
 // ListByDeck returns all cards in deckID. Returns ErrForbidden if userID doesn't own the deck.
 func (s *CardService) ListByDeck(userID, deckID uint) ([]model.Card, error) {
-	if _, err := s.ownerDeck(userID, deckID); err != nil {
+	if _, err := s.access.EditableDeck(userID, deckID); err != nil {
 		return nil, err
 	}
 	return s.cards.FindByDeckID(deckID)
@@ -108,7 +84,7 @@ func (s *CardService) ListByDeck(userID, deckID uint) ([]model.Card, error) {
 
 // Update changes front/back/title of a card. Returns ErrForbidden if userID doesn't own the card's deck.
 func (s *CardService) Update(userID, cardID uint, front, back, title string) (*model.Card, error) {
-	card, err := s.ownerCard(userID, cardID)
+	card, err := s.access.EditableCard(userID, cardID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +99,7 @@ func (s *CardService) Update(userID, cardID uint, front, back, title string) (*m
 
 // Delete removes a card. Returns ErrForbidden if userID doesn't own the card's deck.
 func (s *CardService) Delete(userID, cardID uint) error {
-	if _, err := s.ownerCard(userID, cardID); err != nil {
+	if _, err := s.access.EditableCard(userID, cardID); err != nil {
 		return err
 	}
 	return s.cards.Delete(cardID)
@@ -133,7 +109,7 @@ func (s *CardService) Delete(userID, cardID uint) error {
 // Returns ErrForbidden if userID doesn't own the deck.
 // Returns ErrInvalidCardType or ErrInvalidCloze on invalid opts.
 func (s *CardService) CreateAdvanced(userID, deckID uint, opts CardCreateOpts) (*model.Card, error) {
-	if _, err := s.ownerDeck(userID, deckID); err != nil {
+	if _, err := s.access.EditableDeck(userID, deckID); err != nil {
 		return nil, err
 	}
 	if err := validateCardOpts(opts); err != nil {
@@ -160,7 +136,7 @@ func (s *CardService) CreateAdvanced(userID, deckID uint, opts CardCreateOpts) (
 // Returns ErrForbidden if userID doesn't own the card's deck.
 // Returns ErrInvalidCardType or ErrInvalidCloze on invalid opts.
 func (s *CardService) UpdateAdvanced(userID, cardID uint, opts CardCreateOpts) (*model.Card, error) {
-	card, err := s.ownerCard(userID, cardID)
+	card, err := s.access.EditableCard(userID, cardID)
 	if err != nil {
 		return nil, err
 	}

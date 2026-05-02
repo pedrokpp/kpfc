@@ -12,11 +12,12 @@ var ErrForbidden = errors.New("forbidden")
 
 // DeckService handles deck management operations.
 type DeckService struct {
-	decks repository.DeckRepository
+	decks  repository.DeckRepository
+	access *AccessService
 }
 
-func NewDeckService(decks repository.DeckRepository) *DeckService {
-	return &DeckService{decks: decks}
+func NewDeckService(decks repository.DeckRepository, access *AccessService) *DeckService {
+	return &DeckService{decks: decks, access: access}
 }
 
 // Create creates a new deck owned by userID.
@@ -36,14 +37,7 @@ func (s *DeckService) Create(userID uint, title, description string, isPublic bo
 // GetByID returns the deck with the given ID. Returns ErrForbidden if the deck
 // exists but does not belong to userID. Returns repository.ErrNotFound if absent.
 func (s *DeckService) GetByID(userID, deckID uint) (*model.Deck, error) {
-	deck, err := s.decks.FindByID(deckID)
-	if err != nil {
-		return nil, err
-	}
-	if deck.UserID != userID {
-		return nil, ErrForbidden
-	}
-	return deck, nil
+	return s.access.EditableDeck(userID, deckID)
 }
 
 // ListByUser returns all decks owned by userID.
@@ -54,12 +48,9 @@ func (s *DeckService) ListByUser(userID uint) ([]model.Deck, error) {
 // Update changes the mutable fields of a deck. Returns ErrForbidden if the deck
 // does not belong to userID.
 func (s *DeckService) Update(userID, deckID uint, title, description string, isPublic bool) (*model.Deck, error) {
-	deck, err := s.decks.FindByID(deckID)
+	deck, err := s.access.EditableDeck(userID, deckID)
 	if err != nil {
 		return nil, err
-	}
-	if deck.UserID != userID {
-		return nil, ErrForbidden
 	}
 	deck.Title = title
 	deck.Description = description
@@ -72,12 +63,9 @@ func (s *DeckService) Update(userID, deckID uint, title, description string, isP
 
 // Delete removes the deck. Returns ErrForbidden if the deck does not belong to userID.
 func (s *DeckService) Delete(userID, deckID uint) error {
-	deck, err := s.decks.FindByID(deckID)
+	_, err := s.access.EditableDeck(userID, deckID)
 	if err != nil {
 		return err
-	}
-	if deck.UserID != userID {
-		return ErrForbidden
 	}
 	return s.decks.Delete(deckID)
 }
@@ -90,16 +78,9 @@ func (s *DeckService) ListPublic(sortBy string) ([]model.Deck, error) {
 // ToggleUpvote adds or removes an upvote on a public deck.
 // Returns ErrForbidden if the user owns the deck or the deck is not public.
 func (s *DeckService) ToggleUpvote(userID, deckID uint) error {
-	deck, err := s.decks.FindByID(deckID)
+	_, err := s.access.UpvotableDeck(userID, deckID)
 	if err != nil {
 		return err
 	}
-	if deck.UserID == userID {
-		return ErrForbidden
-	}
-	if !deck.IsPublic {
-		return ErrForbidden
-	}
-
 	return s.decks.ToggleUpvote(userID, deckID)
 }
