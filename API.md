@@ -1,6 +1,6 @@
 # KPFC API Reference
 
-**Version:** 0.1.12
+**Version:** 0.1.15
 **Base URL:** `http://localhost:8080/api/v1`
 
 KPFC is an Anki-like spaced-repetition flashcard backend. It uses JWT Bearer tokens for authentication, PostgreSQL for storage, and the SM-2 algorithm for study scheduling.
@@ -664,7 +664,7 @@ Serve a media file directly. No authentication required. Suitable for use in `<i
 **Response 200:** Raw file bytes with appropriate `Content-Type` and `Cache-Control: public, max-age=31536000, immutable` headers.
 
 **Errors:**
-- `404` — `"media not found"`
+- `404` — `"media not found"` when the `public_id` does not exist or the physical asset is missing from storage
 
 ---
 
@@ -675,6 +675,8 @@ Delete a media file. Requires authentication. Only the owning user may delete th
 **Path params:** `id` (string) — media `public_id` token
 
 **Response:** `204 No Content` (empty body)
+
+If the record exists, belongs to the authenticated user, but the physical file is already missing from storage, the API still removes the record and returns `204`.
 
 **Errors:**
 - `401` — `"unauthorized"`

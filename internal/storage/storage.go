@@ -2,11 +2,15 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 )
+
+// ErrNotFound indicates the requested object does not exist in storage.
+var ErrNotFound = errors.New("storage: not found")
 
 // Storage abstracts file persistence. Implementations may target the local
 // filesystem, S3, GCS, or any other backend without touching service code.
@@ -48,6 +52,9 @@ func (s *LocalStorage) Fetch(_ context.Context, path string) (io.ReadCloser, err
 	full := filepath.Join(s.root, filepath.FromSlash(path))
 	f, err := os.Open(full)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("storage fetch: %w", err)
 	}
 	return f, nil
@@ -57,6 +64,9 @@ func (s *LocalStorage) Fetch(_ context.Context, path string) (io.ReadCloser, err
 func (s *LocalStorage) Delete(_ context.Context, path string) error {
 	full := filepath.Join(s.root, filepath.FromSlash(path))
 	if err := os.Remove(full); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrNotFound
+		}
 		return fmt.Errorf("storage delete: %w", err)
 	}
 	return nil

@@ -3,6 +3,7 @@ package storage_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -49,17 +50,16 @@ func TestLocalStorage_Delete(t *testing.T) {
 	if err := s.Delete(ctx, "del.txt"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	// second delete should error
-	if err := s.Delete(ctx, "del.txt"); err == nil {
-		t.Error("expected error deleting non-existent file, got nil")
+	if err := s.Delete(ctx, "del.txt"); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("second Delete err = %v, want ErrNotFound", err)
 	}
 }
 
 func TestLocalStorage_FetchNonExistent(t *testing.T) {
 	s := newTemp(t)
 	_, err := s.Fetch(context.Background(), "does/not/exist.txt")
-	if err == nil {
-		t.Error("expected error fetching non-existent path, got nil")
+	if !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("Fetch err = %v, want ErrNotFound", err)
 	}
 }
 

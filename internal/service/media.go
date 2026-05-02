@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -26,6 +28,13 @@ var allowedContentTypes = map[string]string{
 
 const maxMediaSize = 10 * 1024 * 1024 // 10 MB
 
+// MediaUploadInput captures the raw upload passed from the HTTP layer.
+type MediaUploadInput struct {
+	Filename string
+	Size     int64
+	Reader   io.Reader
+}
+
 // MediaService handles upload, retrieval, and deletion of media files.
 type MediaService struct {
 	repo   repository.MediaRepository
@@ -40,29 +49,23 @@ func NewMediaService(repo repository.MediaRepository, store storage.Storage, idG
 }
 
 // Upload validates, stores, and records a media file. Returns the created Media record.
-func (s *MediaService) Upload(ctx context.Context, userID uint, filename, contentType string, size int64, r io.Reader) (*model.Media, error) {
-	ext, ok := allowedContentTypes[contentType]
-	if !ok {
-		return nil, fmt.Errorf("unsupported content type: %s", contentType)
+func (s *MediaService) Upload(ctx context.Context, userID uint, input MediaUploadInput) (*model.Media, error) {
+	contentType, body, err := detectContentType(input.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("detect content type: %w", err)
 	}
-	if size > maxMediaSize {
-		return nil, fmt.Errorf("file too large: %d bytes (max %d)", size, maxMediaSize)
+	ext, err := validateUpload(contentType, input.Size)
+	if err != nil {
+		return nil, err
 	}
 
-	storagePath := fmt.Sprintf("%d/%s.%s", userID, s.idGen(), ext)
+	storagePath := s.buildStoragePath(userID, ext)
 
-	if err := s.store.Store(ctx, storagePath, r); err != nil {
+	if err := s.store.Store(ctx, storagePath, body); err != nil {
 		return nil, fmt.Errorf("media upload store: %w", err)
 	}
 
-	m := &model.Media{
-		PublicID:    s.idGen(),
-		UserID:      userID,
-		Filename:    sanitizeFilename(filename),
-		ContentType: contentType,
-		Size:        size,
-		StoragePath: storagePath,
-	}
+	m := s.buildMediaRecord(userID, input.Filename, contentType, storagePath, input.Size)
 	if err := s.repo.Create(m); err != nil {
 		// best-effort cleanup; ignore secondary error
 		_ = s.store.Delete(ctx, storagePath)
@@ -71,9 +74,9 @@ func (s *MediaService) Upload(ctx context.Context, userID uint, filename, conten
 	return m, nil
 }
 
-// GetByPublicID returns the Media record and an open reader for its content.
+// Open returns the Media record and an open reader for its content.
 // The caller must close the reader.
-func (s *MediaService) GetByPublicID(ctx context.Context, publicID string) (*model.Media, io.ReadCloser, error) {
+func (s *MediaService) Open(ctx context.Context, publicID string) (*model.Media, io.ReadCloser, error) {
 	m, err := s.repo.FindByPublicID(publicID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -83,6 +86,9 @@ func (s *MediaService) GetByPublicID(ctx context.Context, publicID string) (*mod
 	}
 	rc, err := s.store.Fetch(ctx, m.StoragePath)
 	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil, nil, repository.ErrNotFound
+		}
 		return nil, nil, fmt.Errorf("media fetch storage: %w", err)
 	}
 	return m, rc, nil
@@ -96,9 +102,54 @@ func (s *MediaService) Delete(ctx context.Context, userID uint, publicID string)
 		return err
 	}
 	if err := s.store.Delete(ctx, m.StoragePath); err != nil {
-		return fmt.Errorf("media delete storage: %w", err)
+		if !errors.Is(err, storage.ErrNotFound) {
+			return fmt.Errorf("media delete storage: %w", err)
+		}
 	}
-	return s.repo.Delete(m.ID)
+	if err := s.repo.Delete(m.ID); err != nil {
+		return fmt.Errorf("media delete record: %w", err)
+	}
+	return nil
+}
+
+func detectContentType(r io.Reader) (contentType string, body io.Reader, err error) {
+	sniff := make([]byte, 512)
+	n, readErr := io.ReadFull(r, sniff)
+	switch {
+	case readErr == nil:
+	case errors.Is(readErr, io.EOF), errors.Is(readErr, io.ErrUnexpectedEOF):
+	default:
+		return "", nil, readErr
+	}
+
+	sniff = sniff[:n]
+	return http.DetectContentType(sniff), io.MultiReader(bytes.NewReader(sniff), r), nil
+}
+
+func validateUpload(contentType string, size int64) (string, error) {
+	ext, ok := allowedContentTypes[contentType]
+	if !ok {
+		return "", fmt.Errorf("unsupported content type: %s", contentType)
+	}
+	if size > maxMediaSize {
+		return "", fmt.Errorf("file too large: %d bytes (max %d)", size, maxMediaSize)
+	}
+	return ext, nil
+}
+
+func (s *MediaService) buildStoragePath(userID uint, ext string) string {
+	return fmt.Sprintf("%d/%s.%s", userID, s.idGen(), ext)
+}
+
+func (s *MediaService) buildMediaRecord(userID uint, filename, contentType, storagePath string, size int64) *model.Media {
+	return &model.Media{
+		PublicID:    s.idGen(),
+		UserID:      userID,
+		Filename:    sanitizeFilename(filename),
+		ContentType: contentType,
+		Size:        size,
+		StoragePath: storagePath,
+	}
 }
 
 // sanitizeFilename strips directory components from an uploaded filename.

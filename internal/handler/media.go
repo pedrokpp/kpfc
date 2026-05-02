@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -21,8 +20,8 @@ const maxUploadBytes = 10 * 1024 * 1024 // 10 MB
 
 // mediaServiceIface is the subset of MediaService used by the handler.
 type mediaServiceIface interface {
-	Upload(ctx context.Context, userID uint, filename, contentType string, size int64, r io.Reader) (*model.Media, error)
-	GetByPublicID(ctx context.Context, publicID string) (*model.Media, io.ReadCloser, error)
+	Upload(ctx context.Context, userID uint, input service.MediaUploadInput) (*model.Media, error)
+	Open(ctx context.Context, publicID string) (*model.Media, io.ReadCloser, error)
 	Delete(ctx context.Context, userID uint, publicID string) error
 }
 
@@ -56,13 +55,11 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Detect content type from first 512 bytes, then reassemble the full reader.
-	sniff := make([]byte, 512)
-	n, _ := file.Read(sniff)
-	contentType := http.DetectContentType(sniff[:n])
-	body := io.MultiReader(bytes.NewReader(sniff[:n]), file)
-
-	m, err := h.svc.Upload(r.Context(), userID, header.Filename, contentType, header.Size, body)
+	m, err := h.svc.Upload(r.Context(), userID, service.MediaUploadInput{
+		Filename: header.Filename,
+		Size:     header.Size,
+		Reader:   file,
+	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -75,7 +72,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 func (h *MediaHandler) Serve(w http.ResponseWriter, r *http.Request) {
 	publicID := chi.URLParam(r, "id")
 
-	m, rc, err := h.svc.GetByPublicID(r.Context(), publicID)
+	m, rc, err := h.svc.Open(r.Context(), publicID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "media not found")

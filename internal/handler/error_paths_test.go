@@ -95,10 +95,10 @@ func TestCardUpdateErrorPaths(t *testing.T) {
 	cardID := createCard(t, r, token, deckID, "Q", "A")
 
 	tests := []struct {
-		name   string
-		path   string
-		body   string
-		want   int
+		name string
+		path string
+		body string
+		want int
 	}{
 		{name: "invalid id", path: "/api/v1/cards/nope", body: `{"front":"Q","back":"A"}`, want: http.StatusBadRequest},
 		{name: "invalid json", path: "/api/v1/cards/1", body: `{`, want: http.StatusBadRequest},
@@ -137,7 +137,7 @@ func TestUpdateUser_InvalidJSON(t *testing.T) {
 }
 
 func TestMediaUpload_InvalidMultipart(t *testing.T) {
-	r, _ := setupMediaTestRouter(t)
+	r, _, _, _ := setupMediaTestRouter(t)
 	token := loginMedia(t, r, "bad-multipart@example.com")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/media", strings.NewReader("not multipart"))

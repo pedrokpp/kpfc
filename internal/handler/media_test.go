@@ -8,6 +8,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,7 +26,7 @@ import (
 	"kpp.dev/kpfc/internal/storage"
 )
 
-func setupMediaTestRouter(t *testing.T) (*chi.Mux, *service.AuthService) {
+func setupMediaTestRouter(t *testing.T) (*chi.Mux, *service.AuthService, repository.MediaRepository, string) {
 	t.Helper()
 	dsn := "file:" + t.Name() + "?mode=memory&cache=shared"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Discard})
@@ -40,7 +42,8 @@ func setupMediaTestRouter(t *testing.T) (*chi.Mux, *service.AuthService) {
 	accessSvc := service.NewAccessService(nil, nil, mediaRepo)
 	authSvc := service.NewAuthService(userRepo, "test-secret")
 
-	store := storage.NewLocalStorage(t.TempDir())
+	storeRoot := t.TempDir()
+	store := storage.NewLocalStorage(storeRoot)
 	n := 0
 	idGen := func() string { n++; return fmt.Sprintf("file%d", n) }
 	mediaSvc := service.NewMediaService(mediaRepo, store, idGen, accessSvc)
@@ -57,7 +60,7 @@ func setupMediaTestRouter(t *testing.T) (*chi.Mux, *service.AuthService) {
 		r.Post("/api/v1/media", mediaHandler.Upload)
 		r.Delete("/api/v1/media/{id}", mediaHandler.Delete)
 	})
-	return r, authSvc
+	return r, authSvc, mediaRepo, storeRoot
 }
 
 // loginMedia registers + logs in a test user and returns a Bearer token.
@@ -110,7 +113,7 @@ var minPNG = []byte{
 }
 
 func TestMedia_UploadAndServe(t *testing.T) {
-	r, _ := setupMediaTestRouter(t)
+	r, _, _, _ := setupMediaTestRouter(t)
 	token := loginMedia(t, r, "media1@test.com")
 
 	body, ct := buildMultipart(t, "test.png", "image/png", minPNG)
@@ -152,7 +155,7 @@ func TestMedia_UploadAndServe(t *testing.T) {
 }
 
 func TestMedia_Upload_InvalidType(t *testing.T) {
-	r, _ := setupMediaTestRouter(t)
+	r, _, _, _ := setupMediaTestRouter(t)
 	token := loginMedia(t, r, "media2@test.com")
 
 	body, ct := buildMultipart(t, "file.exe", "application/octet-stream", []byte("MZ fake exe"))
@@ -168,7 +171,7 @@ func TestMedia_Upload_InvalidType(t *testing.T) {
 }
 
 func TestMedia_Upload_Unauthenticated(t *testing.T) {
-	r, _ := setupMediaTestRouter(t)
+	r, _, _, _ := setupMediaTestRouter(t)
 	body, ct := buildMultipart(t, "test.png", "image/png", minPNG)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/media", body)
 	req.Header.Set("Content-Type", ct)
@@ -181,7 +184,7 @@ func TestMedia_Upload_Unauthenticated(t *testing.T) {
 }
 
 func TestMedia_Serve_NotFound(t *testing.T) {
-	r, _ := setupMediaTestRouter(t)
+	r, _, _, _ := setupMediaTestRouter(t)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/media/999", nil))
 	if rec.Code != http.StatusNotFound {
@@ -190,7 +193,7 @@ func TestMedia_Serve_NotFound(t *testing.T) {
 }
 
 func TestMedia_Delete(t *testing.T) {
-	r, _ := setupMediaTestRouter(t)
+	r, _, _, _ := setupMediaTestRouter(t)
 	token := loginMedia(t, r, "media3@test.com")
 
 	// upload
@@ -219,13 +222,13 @@ func TestMedia_Delete(t *testing.T) {
 	// serve after delete should 404 (storage gone) or 500 (record gone)
 	rec3 := httptest.NewRecorder()
 	r.ServeHTTP(rec3, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s", publicID), nil))
-	if rec3.Code == http.StatusOK {
-		t.Fatal("file should not be accessible after delete")
+	if rec3.Code != http.StatusNotFound {
+		t.Fatalf("serve after delete: got %d", rec3.Code)
 	}
 }
 
 func TestMedia_Delete_Forbidden(t *testing.T) {
-	r, _ := setupMediaTestRouter(t)
+	r, _, _, _ := setupMediaTestRouter(t)
 	token1 := loginMedia(t, r, "media4a@test.com")
 	token2 := loginMedia(t, r, "media4b@test.com")
 
@@ -247,5 +250,81 @@ func TestMedia_Delete_Forbidden(t *testing.T) {
 	r.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", rec2.Code)
+	}
+}
+
+func TestMedia_Serve_OrphanedPhysicalAssetReturns404(t *testing.T) {
+	r, _, mediaRepo, storeRoot := setupMediaTestRouter(t)
+	token := loginMedia(t, r, "media5@test.com")
+
+	body, ct := buildMultipart(t, "orphan.png", "image/png", minPNG)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/media", body)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", ct)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload: got %d", rec.Code)
+	}
+
+	var resp map[string]any
+	json.NewDecoder(rec.Body).Decode(&resp)
+	publicID := resp["public_id"].(string)
+
+	media, err := mediaRepo.FindByPublicID(publicID)
+	if err != nil {
+		t.Fatalf("FindByPublicID: %v", err)
+	}
+	if err := os.Remove(filepath.Join(storeRoot, filepath.FromSlash(media.StoragePath))); err != nil {
+		t.Fatalf("remove stored file: %v", err)
+	}
+
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s", publicID), nil))
+	if rec2.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec2.Code)
+	}
+}
+
+func TestMedia_Delete_OrphanedPhysicalAssetReturns204(t *testing.T) {
+	r, _, mediaRepo, storeRoot := setupMediaTestRouter(t)
+	token := loginMedia(t, r, "media6@test.com")
+
+	body, ct := buildMultipart(t, "orphan-delete.png", "image/png", minPNG)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/media", body)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", ct)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload: got %d", rec.Code)
+	}
+
+	var resp map[string]any
+	json.NewDecoder(rec.Body).Decode(&resp)
+	publicID := resp["public_id"].(string)
+
+	media, err := mediaRepo.FindByPublicID(publicID)
+	if err != nil {
+		t.Fatalf("FindByPublicID: %v", err)
+	}
+	if err := os.Remove(filepath.Join(storeRoot, filepath.FromSlash(media.StoragePath))); err != nil {
+		t.Fatalf("remove stored file: %v", err)
+	}
+
+	req2 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/media/%s", publicID), nil)
+	req2.Header.Set("Authorization", "Bearer "+token)
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec2.Code)
+	}
+
+	rec3 := httptest.NewRecorder()
+	r.ServeHTTP(rec3, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s", publicID), nil))
+	if rec3.Code != http.StatusNotFound {
+		t.Fatalf("serve after orphan delete: got %d", rec3.Code)
 	}
 }
