@@ -27,7 +27,7 @@ Key characteristics:
 | [Go](https://go.dev) | Backend language — standard library preferred to minimize supply chain attack surface |
 | [Chi](https://github.com/go-chi/chi) | HTTP router — lightweight, idiomatic, stdlib-compatible |
 | [GORM](https://gorm.io) | ORM for database access |
-| [SQLite](https://www.sqlite.org) | Initial database — will migrate to [PostgreSQL](https://www.postgresql.org) as scale requires |
+| [SQLite](https://www.sqlite.org) | Primary database — simple, local-first, and enough for the current scale |
 | [Argon2](https://pkg.go.dev/golang.org/x/crypto/argon2) | Password hashing (Argon2id) |
 | [Docker](https://www.docker.com) | Containerization via multi-stage builds |
 | [Just](https://github.com/casey/just) | Command runner (Justfile recipes) |
@@ -288,6 +288,11 @@ go build -ldflags "-X main.version=$(cat VERSION)" -o kpfc .
 ./kpfc -debug -log-format json  # Debug + JSON logs
 ```
 
+Runtime defaults:
+- `DB_PATH=./data/kpfc.db`
+- `MEDIA_ROOT=./media`
+- `PORT=8080`
+
 ### Using Just
 ```bash
 just build        # Build binary with version embedding
@@ -306,10 +311,12 @@ docker-compose up --build
 
 ### Docker Setup
 `docker/Dockerfile` uses a two-stage build:
-1. **Builder stage** (`golang:1.24-alpine`) — compiles the binary with `ldflags` for version embedding
+1. **Builder stage** (`golang:1.26-alpine`) — installs the CGO toolchain and compiles the SQLite-backed binary with version embedding
 2. **Runner stage** (`alpine:latest`) — minimal image, runs binary as a non-root user
 
-`docker-compose.yml` mounts a local volume for SQLite data persistence.
+`docker-compose.yml` runs a single `kpfc` service and mounts named volumes for:
+- `/data` — SQLite database persistence
+- `/media` — uploaded media persistence
 
 ---
 

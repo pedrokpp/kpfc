@@ -12,10 +12,11 @@ import (
 // If the variable is absent, the value in `default_value` is used.
 // Supported field types: string, int, bool.
 type Config struct {
-	Port        int    `env:"PORT"         default_value:"8080"`
-	DatabaseURL string `env:"DATABASE_URL" default_value:""`
-	JWTSecret   string `env:"JWT_SECRET"   default_value:""`
-	MediaRoot   string `env:"MEDIA_ROOT"   default_value:"./media"`
+	Port             int    `env:"PORT"               default_value:"8080"`
+	DBPath           string `env:"DB_PATH"            default_value:"./data/kpfc.db"`
+	JWTSecret        string `env:"JWT_SECRET"         default_value:""`
+	MediaRoot        string `env:"MEDIA_ROOT"         default_value:"./media"`
+	CORSAllowOrigins string `env:"CORS_ALLOW_ORIGINS" default_value:"http://localhost:5173"`
 }
 
 // Load reads configuration from environment variables using struct reflection.

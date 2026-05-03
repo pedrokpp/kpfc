@@ -1,18 +1,19 @@
 # KPFC API Reference
 
-**Version:** 0.1.15
+**Version:** 0.1.16
 **Base URL:** `http://localhost:8080/api/v1`
 
-KPFC is an Anki-like spaced-repetition flashcard backend. It uses JWT Bearer tokens for authentication, PostgreSQL for storage, and the SM-2 algorithm for study scheduling.
+KPFC is an Anki-like spaced-repetition flashcard backend. It uses JWT Bearer tokens for authentication, SQLite for storage, and the SM-2 algorithm for study scheduling.
 
 ## Configuration
 
 | Env Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8080` | Server listen port |
-| `DATABASE_URL` | (required) | PostgreSQL connection string |
+| `DB_PATH` | `./data/kpfc.db` | SQLite database file path |
 | `JWT_SECRET` | (required) | Secret for JWT signing |
 | `MEDIA_ROOT` | `./media` | Local directory for uploaded media files |
+| `CORS_ALLOW_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins allowed to call the API |
 
 ---
 

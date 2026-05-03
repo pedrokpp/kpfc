@@ -10,12 +10,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"kpp.dev/kpfc/internal/config"
@@ -60,19 +61,24 @@ func main() {
 		log.Warn("JWT_SECRET is not set — authentication will not work correctly")
 	}
 
-	log.Debug("config loaded", "port", cfg.Port, "database", "configured")
+	log.Debug("config loaded", "port", cfg.Port, "db_path", cfg.DBPath)
 
-	if cfg.DatabaseURL == "" {
-		log.Error("DATABASE_URL is not set")
+	if cfg.DBPath == "" {
+		log.Error("DB_PATH is not set")
 		os.Exit(1)
 	}
 
-	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
+	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
+		log.Error("failed to create database directory", "path", filepath.Dir(cfg.DBPath), "err", err)
+		os.Exit(1)
+	}
+
+	db, err := gorm.Open(sqlite.Open(cfg.DBPath), &gorm.Config{})
 	if err != nil {
 		log.Error("failed to open database", "err", err)
 		os.Exit(1)
 	}
-	log.Info("database connected", "driver", "postgres")
+	log.Info("database connected", "driver", "sqlite", "path", cfg.DBPath)
 
 	if err := db.AutoMigrate(
 		&model.User{},
@@ -113,6 +119,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
+	r.Use(middleware.CORS(cfg.CORSAllowOrigins))
 	if *verbose {
 		r.Use(chimiddleware.Logger)
 	}

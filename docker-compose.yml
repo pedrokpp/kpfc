@@ -1,14 +1,4 @@
 services:
-  db:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: kpfc
-      POSTGRES_PASSWORD: kpfc
-      POSTGRES_DB: kpfc
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
-
   kpfc:
     build:
       context: .
@@ -18,12 +8,10 @@ services:
     env_file:
       - .env.docker
     volumes:
+      - dbdata:/data
       - mediadata:/media
-    depends_on:
-      db:
-        condition: service_started
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  dbdata:
   mediadata:
