@@ -337,7 +337,7 @@ This document tracks the phased implementation of the KPFC backend. Each phase b
 - [x] Implement `internal/repository/gorm_media.go` — `GORMMediaRepository`
 - [x] Create `internal/service/media.go` — `MediaService` (receives `Storage` interface + `MediaRepository`):
   - `Upload(userID uint, filename string, contentType string, size int64, reader io.Reader) (*model.Media, error)`:
-    - Validate content type (allow: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, `audio/mpeg`, `audio/mp4`)
+    - Validate content type (allow: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `audio/mpeg`, `audio/mp4`)
     - Validate size (max 10MB)
     - Generate storage path: `{userID}/{uuid}.{ext}`
     - Call `storage.Store(ctx, storagePath, reader)` — **never** `os.Create` directly

@@ -621,7 +621,6 @@ The `public_id` is a random 32-character hex token. Media URLs use this token in
 | `image/jpeg` | `.jpg`, `.jpeg` |
 | `image/gif` | `.gif` |
 | `image/webp` | `.webp` |
-| `image/svg+xml` | `.svg` |
 | `audio/mpeg` | `.mp3` |
 | `audio/mp4` | `.m4a` |
 

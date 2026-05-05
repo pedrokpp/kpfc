@@ -21,7 +21,6 @@ var allowedContentTypes = map[string]string{
 	"image/jpeg":    "jpg",
 	"image/gif":     "gif",
 	"image/webp":    "webp",
-	"image/svg+xml": "svg",
 	"audio/mpeg":    "mp3",
 	"audio/mp4":     "m4a",
 }

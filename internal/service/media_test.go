@@ -156,6 +156,13 @@ func TestMediaServiceUploadRejectsUnsupportedType(t *testing.T) {
 	}
 }
 
+func TestValidateUploadRejectsSVG(t *testing.T) {
+	_, err := validateUpload("image/svg+xml", 1)
+	if err == nil || !strings.Contains(err.Error(), "unsupported content type") {
+		t.Fatalf("err = %v, want unsupported content type", err)
+	}
+}
+
 func TestMediaServiceUploadRejectsOversize(t *testing.T) {
 	repo := &fakeMediaRepo{}
 	store := &fakeStorage{}

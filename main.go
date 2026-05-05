@@ -58,7 +58,8 @@ func main() {
 	}
 
 	if cfg.JWTSecret == "" {
-		log.Warn("JWT_SECRET is not set — authentication will not work correctly")
+		log.Error("JWT_SECRET is not set — authentication will not work correctly")
+		os.Exit(-1)
 	}
 
 	log.Debug("config loaded", "port", cfg.Port, "db_path", cfg.DBPath)
@@ -92,6 +93,11 @@ func main() {
 	}
 	log.Debug("migrations applied")
 
+	// Na prática:
+	// - dono: `7` = leitura + escrita + execução
+	// - grupo: `5` = leitura + execução
+	// - outros: `5` = leitura + execução
+	// 0o755 = rwxr-xr-x
 	if err := os.MkdirAll(cfg.MediaRoot, 0o755); err != nil {
 		log.Error("failed to create media root directory", "err", err)
 		os.Exit(1)
