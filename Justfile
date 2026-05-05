@@ -10,7 +10,7 @@ run: build
 
 # Run all tests.
 test:
-    go test ./...
+    CGO_ENABLED=1 go test ./...
 
 # Run static analysis.
 lint:
